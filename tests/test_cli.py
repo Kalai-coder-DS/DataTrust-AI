@@ -27,6 +27,18 @@ def test_cli_writes_json(sample_dir, tmp_path):
     assert data["quality"]["total_issues"] > 0
 
 
+def test_cli_statistics_with_target(sample_dir, capsys):
+    assert run([str(sample_dir / "customers_dirty.csv"), "--target", "churned"]) == 0
+    out = capsys.readouterr().out
+    assert "STATISTICAL SUMMARY" in out
+    assert "Target 'churned': classification" in out
+
+
+def test_cli_invalid_target_returns_error(sample_dir, capsys):
+    assert run([str(sample_dir / "customers_dirty.csv"), "--target", "nope"]) == 1
+    assert "not found" in capsys.readouterr().err
+
+
 def test_cli_prints_quality_section(sample_dir, capsys):
     assert run([str(sample_dir / "customers_dirty.csv")]) == 0
     out = capsys.readouterr().out

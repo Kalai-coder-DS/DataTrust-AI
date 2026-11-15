@@ -4,7 +4,8 @@
 
 Upload a CSV and find out whether it can be trusted — and whether it's ready for Machine Learning.
 
-> Status: **Phase 2 — Data quality detection** (Phase 1 ✅ verified).
+> Status: **Phase 3 — Statistical analysis** (Phases 1–2 ✅ verified).
+> What changed in each phase: [CHANGELOG.md](CHANGELOG.md)
 > See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the architecture and the full phase plan.
 
 ## Setup (Windows)
@@ -24,20 +25,21 @@ macOS / Linux: `source .venv/bin/activate` instead of the second line.
 python scripts/generate_sample_data.py              # (re)create sample datasets
 python main.py data/sample/customers_dirty.csv      # profile a file
 python main.py data/sample/customers_dirty.csv --json reports/profile.json
+python main.py data/sample/customers_dirty.csv --target churned   # + class balance for a target
 python scripts/run_quality.py path/to/your_data.csv  # export issues to reports/ (Excel-ready CSV + JSON)
 python -m pytest                                     # run all tests
 ```
 
-## Phase 2 verification checklist
+## Phase 3 verification checklist
 
-> **Regenerate the sample data first** — the Phase 2 generator was improved:
-> `python scripts/generate_sample_data.py`
-
-- [ ] `python -m pytest` → **111 passed**
-- [ ] `python main.py data/sample/customers_dirty.csv` → **12 issues**: 9 medium, 3 low; exactly 7 outliers in `monthly_spend`
-- [ ] `python main.py data/sample/customers_clean.csv` → only 1 LOW outlier issue (a natural extreme income)
-- [ ] Run on your own CSVs (e.g. CarPrice: `doornumber` / `cylindernumber` flagged as numbers-as-words;
-      insurance.csv with an `id` column: 2 duplicates hidden by the ID)
+- [ ] `python -m pytest` → **160 passed**
+- [ ] `python main.py data/sample/customers_dirty.csv --target churned` → new **STATISTICAL SUMMARY**:
+  - `age`: 10 invalid values excluded from the statistics
+  - `monthly_spend`: mean ≈ 7,003 but median ≈ 2,181 (outliers pull the mean, not the median)
+  - `annual_income ~ monthly_spend`: Spearman ≈ 0.62 but Pearson ≈ 0.02 (outliers break Pearson)
+  - Target `churned`: classification, imbalance ratio 1.65 → MODERATE
+- [ ] Your data: `python main.py ../../CarPrice_Assignment.csv --target price` and
+      `python main.py ../../insurance.csv --target charges`
 
 On Windows, if `python` points to another installation, use `.venv\Scripts\python.exe` instead of `python`.
 

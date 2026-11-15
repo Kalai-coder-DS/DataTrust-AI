@@ -99,6 +99,18 @@ class Settings:
     near_constant_ratio: float = 0.99
     max_examples: int = 5
 
+    # ---------- Statistics (Phase 3) ----------
+    # Associations at or above this strength are listed in the report.
+    association_report_threshold: float = 0.5
+    # Two numeric columns this correlated carry almost the same information.
+    redundancy_threshold: float = 0.9
+    # Caps the number of columns compared pairwise (pairs grow as n^2).
+    max_columns_for_associations: int = 50
+    # A numeric target with more distinct values than this is treated as regression.
+    max_classes_for_classification: int = 20
+    # Categories below this share of rows are "rare" (models learn little from them).
+    rare_category_pct: float = 1.0
+
     # ---------- Logging ----------
     log_dir: Path = PROJECT_ROOT / "logs"
     log_level: str = field(default_factory=lambda: os.getenv("DATATRUST_LOG_LEVEL", "INFO").upper())

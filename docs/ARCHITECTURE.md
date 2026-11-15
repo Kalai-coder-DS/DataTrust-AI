@@ -67,7 +67,7 @@ datatrust-ai/
 │   ├── ingestion/loader.py       # Ph 1: safe CSV loading
 │   ├── profiling/profiler.py     # Ph 1: structure & semantic types
 │   ├── quality/                  # Ph 2: missing, duplicates, invalid, consistency, outliers
-│   ├── statistics/               # Ph 3: summaries, distributions, correlations
+│   ├── stats/                    # Ph 3: summaries, distributions, associations, target balance
 │   ├── scoring/                  # Ph 4: Data Trust Score, ML Readiness Score
 │   ├── reporting/                # Ph 5: JSON + HTML reports
 │   ├── storage/                  # Ph 5: MySQL repository layer
@@ -168,3 +168,42 @@ recorded as a `check_failed` issue and the others still run.
   matching; candidate for a later phase.
 - Skewness uses the standard moment estimate, which outliers can inflate; Phase 3's
   statistics module will provide robust alternatives.
+
+## 6. Phase 3 — Statistical analysis
+
+Package `datatrust/stats/` (named `stats`, not `statistics`, so it can never be confused
+with Python's built-in `statistics` module).
+
+| File | Purpose |
+|---|---|
+| `stats/models.py` | `NumericSummary`, `CategoricalSummary`, `DatetimeSummary`, `Association`, `TargetSummary`, `StatisticsReport` |
+| `stats/descriptive.py` | Mean, median, std, quartiles, CV, skewness (3 ways), kurtosis, shape label; category counts, rare categories, entropy; date range |
+| `stats/associations.py` | Spearman (primary) + Pearson; bias-corrected Cramér's V; correlation ratio (eta) |
+| `stats/target.py` | User-chosen target: classification (class balance) or regression |
+| `stats/analyzer.py` | Runs everything; marks feature–target pairs as signal, not redundancy |
+
+### Key design decisions (interview talking points)
+
+1. **Statistics on valid values only.** Placeholders, unparseable text and impossible values
+   are excluded and counted (`excluded`). One `age = 210` must not distort the mean.
+2. **Mean vs median shows outlier influence.** Dirty `monthly_spend`: mean 7,003 vs median
+   2,181, caused by 7 values. The clean file's mean and median are close.
+3. **Spearman is primary, Pearson shown alongside.** In the dirty file, income vs spend has
+   Pearson 0.02 but Spearman 0.62; in the clean file both are ~0.65. Ranks resist outliers.
+   A big gap between the two is itself a diagnostic.
+4. **"Is the skew caused by outliers?" is tested directly**: skewness is recomputed inside
+   the IQR fences. First version used quartile (Bowley) skewness, but on 205 rows it was too
+   noisy and wrongly labelled a genuinely skewed price column. Caught by testing.
+5. **Redundancy ≠ predictive signal.** Two *features* correlated ≥ 0.9 are redundant
+   (multicollinearity). A feature strongly related to the *target* is useful signal. First
+   version flagged both as redundant; fixed after testing with a target.
+6. **Bias-corrected Cramér's V.** The uncorrected version reports spurious association when
+   there are many categories and few rows.
+7. **The target is chosen by the user**, never guessed: a wrong guess would silently produce a
+   misleading ML Readiness Score in Phase 4.
+
+### Known limitations (planned)
+
+- Full pipeline takes ~9 s on 206k rows (pairwise associations, repeated parsing). Fine for
+  now; optimisation is part of Phase 10 hardening.
+- Associations are pairwise only; Phase 4 adds leakage hints (near-perfect target association).
