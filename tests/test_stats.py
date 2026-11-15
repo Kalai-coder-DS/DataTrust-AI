@@ -181,6 +181,29 @@ def test_outliers_break_pearson_but_not_spearman():
     assert abs(assoc.details["pearson"]) < 0.3
 
 
+def test_redundant_label_and_mixed_pairs_carprice_style():
+    """Found in the real CarPrice data: fuelsystem 'idi' <=> diesel, and compression ratio
+    ~21-23 for diesel vs ~7-10 for gas. Both pairs must be flagged as redundant."""
+    rng = np.random.default_rng(10)
+    n = 205
+    fueltype = rng.choice(["gas", "diesel"], n, p=[0.9, 0.1])
+    fuelsystem = np.where(fueltype == "diesel", "idi", rng.choice(["mpfi", "2bbl", "spdi"], n))
+    compression = np.where(fueltype == "diesel", rng.uniform(21, 23, n), rng.uniform(7, 10, n))
+    df = pd.DataFrame({"fueltype": fueltype, "fuelsystem": fuelsystem, "compressionratio": compression})
+    report = StatisticsAnalyzer().analyze(df)
+    assert report.association("fueltype", "fuelsystem", "cramers_v").redundant is True
+    assert report.association("compressionratio", "fueltype", "correlation_ratio").redundant is True
+
+
+def test_moderate_label_association_is_not_redundant():
+    rng = np.random.default_rng(11)
+    a = rng.choice(["x", "y"], 500)
+    b = np.where(rng.uniform(size=500) < 0.8, a, rng.choice(["x", "y"], 500))  # agrees ~90%
+    report = StatisticsAnalyzer().analyze(pd.DataFrame({"a": a, "b": b}))
+    assoc = report.association("a", "b")
+    assert assoc is not None and assoc.value < 0.9 and assoc.redundant is False
+
+
 def test_target_association_is_signal_not_redundancy():
     rng = np.random.default_rng(9)
     size = rng.normal(0, 1, 300)

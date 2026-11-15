@@ -72,7 +72,7 @@ class Association:
     method: str                # pearson | spearman | cramers_v | correlation_ratio
     value: float               # -1..1 for correlations, 0..1 for cramers_v / correlation_ratio
     strength: str              # weak | moderate | strong | very strong
-    redundant: bool = False    # two FEATURES so correlated that one adds little (never set for the target)
+    redundant: bool = False    # two FEATURES so associated (>= 0.9, any pair type) that one adds little; never set for the target
     involves_target: bool = False  # one side is the target: strength here = predictive signal
     details: dict[str, Any] = field(default_factory=dict)  # e.g. the Pearson value for numeric pairs
 

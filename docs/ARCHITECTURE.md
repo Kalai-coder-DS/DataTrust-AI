@@ -194,9 +194,12 @@ with Python's built-in `statistics` module).
 4. **"Is the skew caused by outliers?" is tested directly**: skewness is recomputed inside
    the IQR fences. First version used quartile (Bowley) skewness, but on 205 rows it was too
    noisy and wrongly labelled a genuinely skewed price column. Caught by testing.
-5. **Redundancy ≠ predictive signal.** Two *features* correlated ≥ 0.9 are redundant
+5. **Redundancy ≠ predictive signal.** Two *features* associated ≥ 0.9 are redundant
    (multicollinearity). A feature strongly related to the *target* is useful signal. First
    version flagged both as redundant; fixed after testing with a target.
+   Redundancy applies to every pair type: on the real CarPrice data, `fueltype ~ fuelsystem`
+   (Cramér's V 0.985) and `compressionratio ~ fueltype` (eta 0.984) were initially missed
+   because only number–number pairs were checked.
 6. **Bias-corrected Cramér's V.** The uncorrected version reports spurious association when
    there are many categories and few rows.
 7. **The target is chosen by the user**, never guessed: a wrong guess would silently produce a

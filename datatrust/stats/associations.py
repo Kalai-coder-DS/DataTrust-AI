@@ -18,8 +18,11 @@ How strongly are pairs of columns related? Three measures, one per pair type:
       eta^2 = between-group sum of squares / total sum of squares.
 
 Why this matters for ML:
-  - Two numeric features correlated >= 0.9 are near-duplicates (redundant):
-    keep one, or the model's coefficients become unstable (multicollinearity).
+  - Two features associated >= 0.9 are near-duplicates (redundant): keep one, or
+    the model's coefficients become unstable (multicollinearity). This applies to
+    every pair type. Real example from CarPrice: fuelsystem 'idi' is used only by
+    diesel cars (Cramér's V 0.985 with fueltype), and compression ratio is almost
+    fully explained by fuel type (eta 0.984). Each pair says the same thing twice.
   - Strong association with the target is good news (predictive signal);
     suspiciously perfect association can mean target leakage (Phase 4).
 """
@@ -105,7 +108,8 @@ def _label_pairs(labels: pd.DataFrame, s: Settings) -> list[Association]:
         if v is None or v < s.association_report_threshold:
             continue
         out.append(Association(column_a=a, column_b=b, method="cramers_v",
-                               value=round(v, 4), strength=strength_label(v)))
+                               value=round(v, 4), strength=strength_label(v),
+                               redundant=v >= s.redundancy_threshold))
     return out
 
 
@@ -131,7 +135,8 @@ def _numeric_label_pairs(numbers: pd.DataFrame, labels: pd.DataFrame, s: Setting
         if eta is None or eta < s.association_report_threshold:
             continue
         out.append(Association(column_a=num, column_b=lab, method="correlation_ratio",
-                               value=round(eta, 4), strength=strength_label(eta)))
+                               value=round(eta, 4), strength=strength_label(eta),
+                               redundant=eta >= s.redundancy_threshold))
     return out
 
 

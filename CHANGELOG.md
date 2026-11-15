@@ -3,6 +3,20 @@
 What changed in each phase, so you can see at a glance which files are new or modified.
 Each phase is also a Git tag (`git checkout phase-2` to see the project as it was).
 
+## Phase 3 fix — redundancy for label and mixed pairs
+
+Found by running on the real CarPrice data: `fueltype ~ fuelsystem` (Cramér's V 0.985) and
+`compressionratio ~ fueltype` (eta 0.984) were not marked redundant, because redundancy was
+only checked for number–number pairs.
+
+**Modified files**
+- `datatrust/stats/associations.py` — redundancy (>= 0.9) now applies to Cramér's V and eta too
+- `datatrust/stats/models.py` — comment updated
+- `tests/test_stats.py` — 2 new tests (CarPrice-style redundant pairs; moderate pair not redundant)
+- `CHANGELOG.md`, `docs/ARCHITECTURE.md`
+
+**Tests:** 160 → 162
+
 ## Phase 3 — Statistical analysis
 
 **New files**
