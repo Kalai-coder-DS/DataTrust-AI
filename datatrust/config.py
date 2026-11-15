@@ -1,0 +1,112 @@
+"""
+datatrust/config.py
+
+Central configuration for DataTrust AI.
+
+Why a single config module?
+- Every threshold (file size limit, categorical cut-off, etc.) lives in ONE place,
+  so behaviour is tunable without hunting through code.
+- Values can be overridden by environment variables (12-factor style), which is
+  how the app will later be configured in Django / Docker without code changes.
+"""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+# Project root = folder that contains the `datatrust` package.
+PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent
+
+
+def _env_int(name: str, default: int) -> int:
+    """Read an integer environment variable, falling back safely on bad input."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+@dataclass(frozen=True)
+class Settings:
+    """Immutable application settings. Create a custom instance in tests."""
+
+    # ---------- Ingestion ----------
+    max_file_size_mb: int = field(default_factory=lambda: _env_int("DATATRUST_MAX_FILE_MB", 200))
+    allowed_extensions: tuple[str, ...] = (".csv",)
+    # Tried in order; latin-1 never fails, so it is the last-resort fallback.
+    encodings_to_try: tuple[str, ...] = ("utf-8-sig", "utf-8", "cp1252", "latin-1")
+    candidate_delimiters: str = ",;\t|"
+    sniff_sample_bytes: int = 64 * 1024
+
+    # ---------- Profiling ----------
+    # Max distinct values for a text column to be treated as categorical.
+    categorical_max_unique: int = field(default_factory=lambda: _env_int("DATATRUST_CAT_MAX_UNIQUE", 50))
+    # ...or if distinct values are at most this share of non-null rows.
+    categorical_max_unique_ratio: float = field(default_factory=lambda: _env_float("DATATRUST_CAT_MAX_RATIO", 0.05))
+    # Share of values that must parse as numbers/dates to infer that type for a text column.
+    type_inference_threshold: float = 0.90
+    # Rows sampled per column for expensive parsing checks (keeps profiling fast on big files).
+    inference_sample_size: int = 10_000
+    # Average string length above which an all-unique text column is "free text", not an ID.
+    free_text_min_avg_length: int = 30
+    sample_values_count: int = 5
+    # A column named like an ID (customer_id) stays an identifier down to this uniqueness.
+    id_min_unique_ratio: float = 0.95
+
+    # ---------- Quality checks (Phase 2) ----------
+    # Placeholder strings that mean "missing" but are not blank. pandas already converts
+    # '', 'NA', 'N/A', 'null', 'NaN', 'None' to NaN on load, so these are the ones it misses.
+    disguised_missing_tokens: tuple[str, ...] = (
+        "unknown", "?", "-", "--", "missing", "not available", "not applicable",
+        "undefined", "nil", "none given", "tbd", "#n/a", "na.", "n.a.",
+    )
+    # Numeric codes commonly used to mean "no value" in exported systems.
+    sentinel_numbers: tuple[float, ...] = (-999.0, -9999.0, -99999.0)
+    # Severity bands by % of rows affected: <5 LOW, <20 MEDIUM, <50 HIGH, else CRITICAL.
+    severity_thresholds: tuple[float, float, float] = (5.0, 20.0, 50.0)
+    # Domain range rules: (name token, min, max). Applied when a column name contains the token.
+    range_rules: tuple[tuple[str, float, float], ...] = (
+        ("age", 0, 120),
+        ("percent", 0, 100),
+        ("percentage", 0, 100),
+        ("pct", 0, 100),
+    )
+    # Columns whose names contain these tokens can never be negative.
+    non_negative_tokens: tuple[str, ...] = (
+        "age", "income", "salary", "price", "cost", "amount", "spend", "revenue", "sales",
+        "quantity", "qty", "count", "tenure", "weight", "height", "length", "width",
+        "distance", "duration", "years", "months", "days", "bmi",
+    )
+    # Outliers: classic Tukey fence and the Iglewicz-Hoaglin modified z-score cut-off.
+    iqr_multiplier: float = 1.5
+    modified_z_threshold: float = 3.5
+    min_rows_for_outliers: int = 10
+    # A column whose most common value covers at least this share is "near-constant".
+    near_constant_ratio: float = 0.99
+    max_examples: int = 5
+
+    # ---------- Logging ----------
+    log_dir: Path = PROJECT_ROOT / "logs"
+    log_level: str = field(default_factory=lambda: os.getenv("DATATRUST_LOG_LEVEL", "INFO").upper())
+
+    @property
+    def max_file_size_bytes(self) -> int:
+        return self.max_file_size_mb * 1024 * 1024
+
+
+# Default shared instance. Modules accept a Settings argument so tests can inject their own.
+DEFAULT_SETTINGS = Settings()

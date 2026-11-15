@@ -1,0 +1,38 @@
+{
+  "missing": {
+    "annual_income": 40,
+    "city": 25
+  },
+  "disguised_missing": {
+    "gender": {
+      "value": "Unknown",
+      "count": 8
+    }
+  },
+  "invalid": {
+    "age_non_numeric": 5,
+    "age_negative": 3,
+    "age_over_120": 2,
+    "signup_date_impossible": 6
+  },
+  "inconsistent_case_city": 12,
+  "outliers": {
+    "monthly_spend": 7
+  },
+  "outlier_rows": {
+    "monthly_spend": [
+      17,
+      239,
+      260,
+      263,
+      280,
+      405,
+      406
+    ]
+  },
+  "constant_columns": [
+    "country"
+  ],
+  "exact_duplicate_rows": 15,
+  "total_rows": 515
+}
