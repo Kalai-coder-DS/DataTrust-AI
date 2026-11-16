@@ -33,6 +33,7 @@ logger = get_logger(__name__)
 
 SEVERITY_ORDER = ("critical", "high", "medium", "low")
 MAX_NAME_LENGTH = 255          # datasets.name is VARCHAR(255)
+TEMP_FILE_NAME = "upload.csv"  # safe name for the uploaded file on disk
 
 
 class UploadRejected(DataTrustError):
@@ -129,7 +130,7 @@ def analyze_upload(
     target = (target or "").strip() or None
     workdir = Path(tempfile.mkdtemp(prefix="datatrust-upload-"))
     try:
-        path = workdir / name
+        path = workdir / TEMP_FILE_NAME
         written = 0
         with path.open("wb") as fh:
             for chunk in chunks:
@@ -149,6 +150,7 @@ def analyze_upload(
             raise UploadRejected(str(exc)) from exc
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+    analysis["file"]["file_name"] = name
     run_id = repo.save(analysis)             # StorageError is NOT an upload problem: let it through
     logger.info("Web upload %s analysed and saved as run #%s", name, run_id)
     return run_id
