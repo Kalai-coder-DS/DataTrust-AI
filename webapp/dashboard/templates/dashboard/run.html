@@ -1,0 +1,61 @@
+{% extends "dashboard/base.html" %}
+{% load humanize %}
+{% block title %}Run #{{ run_id }} · {{ dataset_name }}{% endblock %}
+{% block content %}
+<header class="page">
+  <p class="eyebrow"><a href="{% url 'dashboard:home' %}">Dashboard</a> ·
+     <a href="{% url 'dashboard:dataset' dataset_name %}">{{ dataset_name }}</a> · Run #{{ run_id }}</p>
+  <h1>{{ dataset_name }}</h1>
+  <p class="sub">{{ file.rows|intcomma }} rows × {{ file.columns }} columns ·
+     {% if meta.target %}target <b>{{ meta.target }}</b>{% else %}no target column given{% endif %} ·
+     analysed {{ meta.analyzed_at }} · DataTrust AI v{{ meta.version }}</p>
+  <p class="buttons">
+    <a class="button primary" href="{% url 'dashboard:report' run_id %}">Open full report</a>
+    <a class="button" href="{% url 'dashboard:report' run_id %}?download=1">Download report (HTML)</a>
+    <a class="button" href="{% url 'dashboard:json' run_id %}">Download analysis (JSON)</a>
+  </p>
+</header>
+
+<div class="tiles">
+{% with card=trust %}{% include "dashboard/_score_card.html" %}{% endwith %}
+{% with card=ml %}{% include "dashboard/_score_card.html" %}{% endwith %}
+</div>
+
+<section>
+  <h2>Top actions <span class="muted small">biggest score gain first</span></h2>
+  {% if top_actions %}
+  <ol class="actions">
+    {% for x in top_actions %}
+      <li><span class="gain">+{{ x.impact|floatformat:1 }}</span>
+        <div><p>{{ x.reason }}</p><p class="muted">→ {{ x.recommendation }}</p></div></li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="muted">Nothing to fix.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Data quality issues
+    <span class="muted small">{{ total_issues }} found ·
+      {% for s in severity_summary %}{{ s.icon }} {{ s.count }} {{ s.key }}{% if not forloop.last %} · {% endif %}{% endfor %}</span></h2>
+  {% if issues %}
+  <div class="scroll"><table>
+    <thead><tr><th>Severity</th><th>Column</th><th>Issue</th><th class="num">Rows</th><th>Recommendation</th></tr></thead>
+    <tbody>
+    {% for i in issues %}
+      <tr>
+        <td><span class="badge {{ i.sev_css }}">{{ i.sev_icon }} {{ i.sev_label }}</span></td>
+        <td class="name">{{ i.column|default:"(whole dataset)" }}</td>
+        <td>{{ i.message }}{% if i.examples_text %}<br><span class="muted">e.g. {{ i.examples_text }}</span>{% endif %}</td>
+        <td class="num">{{ i.affected_rows|intcomma }}</td>
+        <td>{{ i.recommendation }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="muted">No issues detected.</p>
+  {% endif %}
+</section>
+{% endblock %}

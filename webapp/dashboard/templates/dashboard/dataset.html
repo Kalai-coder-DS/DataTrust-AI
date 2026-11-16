@@ -1,0 +1,64 @@
+{% extends "dashboard/base.html" %}
+{% load humanize %}
+{% block title %}{{ name }}{% endblock %}
+{% block content %}
+<header class="page">
+  <p class="eyebrow"><a href="{% url 'dashboard:home' %}">Dashboard</a> · Dataset history</p>
+  <h1>{{ name }}</h1>
+  <p class="sub">{{ runs|length }} run{{ runs|length|pluralize }} · first analysed {{ first_run.analyzed_at }} UTC</p>
+</header>
+
+<div class="tiles">
+  <section>
+    <h2>Data Trust Score <span class="muted small">latest run</span></h2>
+    <p class="hero"><span class="hero-num">{{ latest.trust_score|floatformat:1 }}</span><span class="hero-of">/ 100</span>
+      <span class="badge {{ latest.trust.css }}">Grade {{ latest.trust.letter }} · {{ latest.trust.meaning }}</span></p>
+    <p class="muted">Change since previous run: {{ latest.trust_change_label }}</p>
+  </section>
+  <section>
+    <h2>ML Readiness Score <span class="muted small">latest run</span></h2>
+    <p class="hero"><span class="hero-num">{{ latest.ml_score|floatformat:1 }}</span><span class="hero-of">/ 100</span>
+      <span class="badge {{ latest.ml.css }}">Grade {{ latest.ml.letter }} · {{ latest.ml.meaning }}</span></p>
+    <p class="muted">Target: {% if latest.target %}<b>{{ latest.target }}</b>{% else %}none given (partial assessment){% endif %}</p>
+  </section>
+</div>
+
+<section>
+  <h2>Score history</h2>
+  <p class="legend" aria-hidden="true">
+    <span class="key"><span class="swatch"></span>Data Trust</span>
+    <span class="key"><span class="swatch ml"></span>ML Readiness</span>
+  </p>
+  {{ chart|safe }}
+  <p class="help">Hover a point for its run, time and grade. The table below has the same numbers.</p>
+</section>
+
+<section>
+  <h2>All runs <span class="muted small">newest first</span></h2>
+  <div class="scroll"><table>
+    <thead><tr>
+      <th>Run</th><th>Analysed (UTC)</th><th class="num">Rows</th><th>Target</th>
+      <th class="num">Data Trust</th><th>Change</th><th class="num">ML Readiness</th>
+      <th class="num">Issues</th><th>Data</th><th>Report</th>
+    </tr></thead>
+    <tbody>
+    {% for r in runs %}
+      <tr>
+        <td><a href="{% url 'dashboard:run' r.run_id %}">#{{ r.run_id }}</a></td>
+        <td>{{ r.analyzed_at }}</td>
+        <td class="num">{{ r.n_rows|intcomma }}</td>
+        <td>{{ r.target|default:"-" }}</td>
+        <td class="num">{{ r.trust_score|floatformat:1 }} <span class="badge {{ r.trust.css }}">{{ r.trust.letter }}</span></td>
+        <td>{{ r.trust_change_label }}</td>
+        <td class="num">{{ r.ml_score|floatformat:1 }} <span class="badge {{ r.ml.css }}">{{ r.ml.letter }}</span></td>
+        <td class="num">{{ r.total_issues }}</td>
+        <td>{{ r.data_label }}</td>
+        <td><a href="{% url 'dashboard:report' r.run_id %}">Full report</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="help">"Data" compares the file's SHA-256 fingerprint with the previous run: <i>same data</i> means a score
+     change came from the tool, <i>new data</i> means the file itself changed.</p>
+</section>
+{% endblock %}

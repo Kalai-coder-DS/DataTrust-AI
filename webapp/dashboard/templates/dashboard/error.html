@@ -1,0 +1,10 @@
+{% extends "dashboard/base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<section class="empty" role="alert">
+  <p class="eyebrow">Error {{ status }}</p>
+  <h1>{{ title }}</h1>
+  <p class="muted">{{ message }}</p>
+  <p class="buttons" style="justify-content:center"><a class="button primary" href="{% url 'dashboard:home' %}">Back to the dashboard</a></p>
+</section>
+{% endblock %}

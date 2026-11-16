@@ -1,0 +1,17 @@
+<section>
+  <h2>{{ card.name }}</h2>
+  <p class="hero"><span class="hero-num">{{ card.score|floatformat:1 }}</span><span class="hero-of">/ 100</span>
+    <span class="badge {{ card.grade.css }}">Grade {{ card.grade.letter }} · {{ card.grade.meaning }}</span></p>
+  <div role="list">
+  {% for d in card.dimensions %}
+    <div class="dim" role="listitem" title="{{ d.label }}: {{ d.score }} / 100 (weight {{ d.weight_pct }}%)">
+      <span class="dim-name">{{ d.label }}</span>
+      <span class="track"><span class="fill" style="width:{{ d.width|stringformat:'.1f' }}%"></span></span>
+      <span class="dim-val">{{ d.score|floatformat:"-1" }}</span>
+      <span class="dim-w">{{ d.weight_pct }}%</span>
+    </div>
+  {% endfor %}
+  </div>
+  {% for c in card.caps %}<p class="cap">⚠ {{ c }}</p>{% endfor %}
+  {% for n in card.notes %}<p class="cap">{{ n }}</p>{% endfor %}
+</section>

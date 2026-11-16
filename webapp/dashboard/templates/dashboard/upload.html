@@ -1,0 +1,35 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Analyse a CSV{% endblock %}
+{% block content %}
+<header class="page">
+  <p class="eyebrow">New analysis</p>
+  <h1>Analyse a CSV</h1>
+  <p class="sub">The file is analysed on this server, the results are saved to the database, and the
+     uploaded file is deleted afterwards. Files up to {{ limit_mb }} MB.</p>
+</header>
+
+<section>
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="errors" role="alert">{% for e in form.non_field_errors %}<p>{{ e }}</p>{% endfor %}</div>
+    {% endif %}
+
+    <div class="field">
+      <label for="{{ form.file.id_for_label }}">{{ form.file.label }}</label>
+      {{ form.file }}
+      {% for e in form.file.errors %}<p class="help" role="alert"><b>{{ e }}</b></p>{% endfor %}
+    </div>
+
+    <div class="field">
+      <label for="{{ form.target.id_for_label }}">{{ form.target.label }}</label>
+      {{ form.target }}
+      <p class="help">{{ form.target.help_text }}</p>
+      {% for e in form.target.errors %}<p class="help" role="alert"><b>{{ e }}</b></p>{% endfor %}
+    </div>
+
+    <button class="button primary" type="submit">Analyse</button>
+    <p class="help">Large files take a few seconds; the page loads when the analysis is done.</p>
+  </form>
+</section>
+{% endblock %}

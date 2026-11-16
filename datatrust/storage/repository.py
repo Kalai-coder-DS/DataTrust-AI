@@ -25,6 +25,10 @@ from datatrust.storage.schema import schema_for
 logger = get_logger(__name__)
 
 
+class RunNotFound(StorageError):
+    """No analysis run with the requested id (the database itself is fine)."""
+
+
 class AnalysisRepository:
     def __init__(self, db: Database) -> None:
         self.db = db
@@ -112,7 +116,7 @@ class AnalysisRepository:
     def get_analysis(self, run_id: int) -> dict:
         rows = self.db.query("SELECT report_json FROM analysis_runs WHERE id = ?", (run_id,))
         if not rows:
-            raise StorageError(f"No analysis run with id {run_id}.")
+            raise RunNotFound(f"No analysis run with id {run_id}.")
         return json.loads(rows[0]["report_json"])
 
     def issues(self, run_id: int) -> list[dict]:

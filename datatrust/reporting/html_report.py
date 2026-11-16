@@ -29,6 +29,11 @@ _SEVERITY = {  # icon + label + CSS class: severity is never shown by colour alo
 _GRADE_CLASS = {"A": "sev-good", "B": "sev-good", "C": "sev-medium", "D": "sev-high", "F": "sev-critical"}
 _GRADE_MEANING = {"A": "excellent", "B": "good", "C": "usable with fixes", "D": "poor", "F": "not usable as-is"}
 
+# Public names: the Django pages (Phase 6) show severities and grades exactly like the report.
+SEVERITY_DISPLAY = _SEVERITY
+GRADE_CLASS = _GRADE_CLASS
+GRADE_MEANING = _GRADE_MEANING
+
 
 def _e(value: Any) -> str:
     """Escape anything for safe inclusion in HTML."""
