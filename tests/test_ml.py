@@ -70,6 +70,21 @@ def test_raw_keeps_defects_cleaned_fixes_exactly_what_the_report_found(dirty, di
     assert "country" not in cleaned.X and "country" in raw.X
 
 
+def test_no_pandas_NA_reaches_scikit_learn(dirty):
+    """Found on Windows (pandas 3.1.1): merged spellings kept pd.NA -> 'boolean value of NA is ambiguous'."""
+    a, df = dirty
+    for clean in (False, True):
+        p = prepare(df, a, "churned", clean=clean)
+        for col in p.categorical:
+            assert p.X[col].dtype == object
+            assert not any(v is pd.NA for v in p.X[col]), col
+            assert all(isinstance(v, str) or (isinstance(v, float) and np.isnan(v)) for v in p.X[col]), col
+        assert p.y.dtype == object and all(isinstance(v, str) for v in p.y)
+    # The column that triggered it: 'city' after merging spellings still has real missing values.
+    cleaned = prepare(df, a, "churned", clean=True)
+    assert cleaned.X["city"].isna().sum() > 0
+
+
 def test_ids_and_target_never_used_as_features(dirty):
     a, df = dirty
     for clean in (False, True):
