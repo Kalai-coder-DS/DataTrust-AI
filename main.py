@@ -2,14 +2,15 @@
 main.py
 
 Command-line entry point (Phase 1: profiling, Phase 2: quality issues, Phase 3: statistics,
-Phase 4: Data Trust and ML Readiness scores).
+Phase 4: Data Trust and ML Readiness scores, Phase 5a: HTML report).
 
     python main.py data/sample/customers_dirty.csv
     python main.py data/sample/customers_dirty.csv --json reports/profile.json
     python main.py data/sample/customers_dirty.csv --target churned
+    python main.py data/sample/customers_dirty.csv --target churned --html reports/dirty.html
 
-The CLI is a thin layer: it wires CSVLoader -> DataProfiler -> QualityAnalyzer -> StatisticsAnalyzer
--> score_dataset and formats output.
+The CLI is a thin layer: datatrust.pipeline.analyze_file runs every phase, and this
+file only formats the result for the terminal / saves JSON and HTML.
 All logic lives in the `datatrust` package, so the Django app (Phase 6) will call
 exactly the same classes.
 """
@@ -21,12 +22,10 @@ import sys
 from pathlib import Path
 
 from datatrust.exceptions import DataTrustError
-from datatrust.ingestion import CSVLoader
 from datatrust.logger import get_logger
-from datatrust.profiling import DataProfiler
-from datatrust.quality import QualityAnalyzer
-from datatrust.scoring import GRADE_MEANING, score_dataset
-from datatrust.stats import StatisticsAnalyzer
+from datatrust.pipeline import analyze_file
+from datatrust.reporting import render_html
+from datatrust.scoring import GRADE_MEANING
 
 logger = get_logger("cli")
 
@@ -185,38 +184,40 @@ def format_scores(scores: dict) -> str:
 
 
 def run(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="DataTrust AI - profile a CSV dataset")
+    parser = argparse.ArgumentParser(description="DataTrust AI - analyse the quality and ML readiness of a CSV file")
     parser.add_argument("csv_path", help="Path to the CSV file")
-    parser.add_argument("--json", dest="json_out", help="Optional path to save the full analysis as JSON")
-    parser.add_argument("--target", help="Column a model should predict (e.g. churned); adds class-balance analysis")
+    parser.add_argument("--target", help="Column a model should predict (e.g. churned); adds class balance and leakage checks")
+    parser.add_argument("--json", dest="json_out", help="Save the full analysis as JSON to this path")
+    parser.add_argument("--html", dest="html_out", help="Save a shareable HTML report to this path")
     args = parser.parse_args(argv)
 
     try:
-        result = CSVLoader().load(args.csv_path)
-        profile = DataProfiler().profile(result.df)
-        quality = QualityAnalyzer().analyze(result.df, profile)
-        stats = StatisticsAnalyzer().analyze(result.df, profile, target=args.target)
-        scores = score_dataset(quality, stats, profile, target=args.target)
+        analysis = analyze_file(args.csv_path, target=args.target)
     except (DataTrustError, ValueError) as exc:
         logger.error("%s", exc)
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
-    load_summary, profile_dict, quality_dict = result.summary(), profile.to_dict(), quality.to_dict()
-    stats_dict, scores_dict = stats.to_dict(), scores.to_dict()
-    print(format_report(load_summary, profile_dict))
-    print(format_quality(quality_dict))
-    print(format_statistics(stats_dict))
-    print(format_scores(scores_dict))
+    print(format_report(analysis["file"], analysis["profile"]))
+    print(format_quality(analysis["quality"]))
+    print(format_statistics(analysis["statistics"]))
+    print(format_scores(analysis["scores"]))
 
     if args.json_out:
-        out = Path(args.json_out)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps({"file": load_summary, "profile": profile_dict,
-                                    "quality": quality_dict, "statistics": stats_dict,
-                                    "scores": scores_dict}, indent=2, default=str))
-        print(f"Profile saved to {out}")
+        out = _prepare(args.json_out)
+        out.write_text(json.dumps(analysis, indent=2, default=str), encoding="utf-8")
+        print(f"JSON saved to {out}")
+    if args.html_out:
+        out = _prepare(args.html_out)
+        out.write_text(render_html(analysis), encoding="utf-8")
+        print(f"HTML report saved to {out}  (open it in your browser)")
     return 0
+
+
+def _prepare(path: str) -> Path:
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    return out
 
 
 if __name__ == "__main__":

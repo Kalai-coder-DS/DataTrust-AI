@@ -3,6 +3,19 @@
 What changed in each phase, so you can see at a glance which files are new or modified.
 Each phase is also a Git tag (`git checkout phase-2` to see the project as it was).
 
+## Phase 5a — HTML report
+
+**New files**
+- `datatrust/pipeline.py` — `analyze_file(path, target)`: runs every phase, returns one dict
+- `datatrust/reporting/__init__.py`, `datatrust/reporting/html_report.py` — self-contained HTML report
+- `tests/test_reporting.py` — 10 tests (pipeline, report sections, offline, XSS escaping, CLI)
+
+**Modified files**
+- `main.py` — uses `analyze_file`; new `--html PATH` option; JSON export now includes `meta`
+- `README.md`, `docs/ARCHITECTURE.md`, `CHANGELOG.md`
+
+**Tests:** 202 → 212
+
 ## Phase 4 — Data Trust Score and ML Readiness Score
 
 **New files**

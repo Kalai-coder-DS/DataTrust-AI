@@ -69,7 +69,8 @@ datatrust-ai/
 │   ├── quality/                  # Ph 2: missing, duplicates, invalid, consistency, outliers
 │   ├── stats/                    # Ph 3: summaries, distributions, associations, target balance
 │   ├── scoring/                  # Ph 4: Data Trust Score, ML Readiness Score (traceable deductions)
-│   ├── reporting/                # Ph 5: JSON + HTML reports
+│   ├── pipeline.py               # Ph 5a: analyze_file() - one entry point for every phase
+│   ├── reporting/                # Ph 5a: self-contained HTML report
 │   ├── storage/                  # Ph 5: MySQL repository layer
 │   ├── ml/                       # Ph 7: scikit-learn baseline models
 │   ├── explain/                  # Ph 8: SHAP
@@ -269,3 +270,24 @@ says the assessment is partial.
 - Weights and points are sensible defaults, not learned; Phase 7 (baseline models) will
   check empirically whether higher ML readiness really means better models.
 - Leakage detection is association-based; time-based leakage needs domain knowledge.
+
+## 8. Phase 5a — HTML report
+
+| File | Purpose |
+|---|---|
+| `pipeline.py` | `analyze_file(path, target)` runs load → profile → quality → stats → scores and returns one JSON-serialisable dict |
+| `reporting/html_report.py` | `render_html(analysis)` → one self-contained HTML page |
+
+### Key design decisions (interview talking points)
+
+1. **One pipeline function.** The CLI, the HTML report, MySQL storage (5b) and Django (6)
+   all call `analyze_file`, so they can never run the phases differently.
+2. **Render from the dict, not live objects.** A stored analysis can be re-rendered later
+   without the original CSV, which is what the web app's history page will do.
+3. **Self-contained page.** Inline CSS and SVG, no JavaScript, no external files: opens
+   offline, can be emailed, prints cleanly. Tested.
+4. **Escape all user data (XSS).** Column names and values come from untrusted files; every
+   one passes through `html.escape`. Tested with a column named `<script>…</script>`.
+5. **Readable charts.** Scores as stat tiles; dimensions as single-hue bars; numeric columns
+   as box plots built from the Phase 3 summary (no raw data needed); severity as icon +
+   label + colour, never colour alone; light and dark mode.
