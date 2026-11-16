@@ -12,6 +12,7 @@ a file, stored in a database, or rendered as HTML without the original DataFrame
 """
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -47,9 +48,18 @@ def analyze_file(path: str | Path, target: str | None = None) -> dict:
             "analyzed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "target": target,
         },
-        "file": result.summary(),
+        "file": {**result.summary(), "sha256": file_sha256(path)},
         "profile": profile.to_dict(),
         "quality": quality.to_dict(),
         "statistics": stats.to_dict(),
         "scores": scores.to_dict(),
     }
+
+
+def file_sha256(path: str | Path) -> str:
+    """Fingerprint of the file's bytes: same fingerprint = identical data (used to track changes)."""
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()

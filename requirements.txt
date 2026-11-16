@@ -1,4 +1,5 @@
-# Phase 1 dependencies only. Each later phase adds its own, with a reason.
+# Each dependency is added by the phase that needs it, with a reason.
 pandas>=2.1
 numpy>=1.26
 pytest>=8.0
+PyMySQL>=1.1      # Phase 5b: talk to MySQL (pure Python, easy to install on Windows)

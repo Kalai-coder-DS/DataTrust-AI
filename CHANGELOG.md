@@ -3,6 +3,28 @@
 What changed in each phase, so you can see at a glance which files are new or modified.
 Each phase is also a Git tag (`git checkout phase-2` to see the project as it was).
 
+## Phase 5b — Store analyses in MySQL
+
+**New files**
+- `datatrust/storage/__init__.py` — `open_repository()`: read `.env`, connect, create tables
+- `datatrust/storage/database.py` — MySQL (PyMySQL) / SQLite connection, `.env` loading, transactions
+- `datatrust/storage/schema.py` — tables `datasets`, `analysis_runs`, `issues`
+- `datatrust/storage/repository.py` — save / history / list / re-load analyses (repository pattern)
+- `scripts/db.py` — `init`, `datasets`, `history`, `issues`, `report` commands
+- `sql/schema_mysql.sql` — the MySQL schema, readable / runnable in Workbench
+- `sql/example_queries.sql` — 6 example queries (window functions, LAG, GROUP BY/HAVING)
+- `.env.example` — template for your local `.env` (database settings)
+- `tests/test_storage.py` — 23 tests on SQLite (round-trip, history, rollback, SQL injection, CLI)
+
+**Modified files**
+- `datatrust/pipeline.py` — adds the file's SHA-256 fingerprint (detects changed data between runs)
+- `main.py` — new `--save` option
+- `requirements.txt` — adds `PyMySQL`
+- `.gitignore` — ignores local `*.db` files
+- `README.md`, `docs/ARCHITECTURE.md`, `CHANGELOG.md`
+
+**Tests:** 212 → 235
+
 ## Phase 5a — HTML report
 
 **New files**

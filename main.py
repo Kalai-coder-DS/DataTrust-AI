@@ -2,12 +2,13 @@
 main.py
 
 Command-line entry point (Phase 1: profiling, Phase 2: quality issues, Phase 3: statistics,
-Phase 4: Data Trust and ML Readiness scores, Phase 5a: HTML report).
+Phase 4: Data Trust and ML Readiness scores, Phase 5a: HTML report, Phase 5b: --save to MySQL).
 
     python main.py data/sample/customers_dirty.csv
     python main.py data/sample/customers_dirty.csv --json reports/profile.json
     python main.py data/sample/customers_dirty.csv --target churned
     python main.py data/sample/customers_dirty.csv --target churned --html reports/dirty.html
+    python main.py data/sample/customers_dirty.csv --target churned --save   # store in MySQL
 
 The CLI is a thin layer: datatrust.pipeline.analyze_file runs every phase, and this
 file only formats the result for the terminal / saves JSON and HTML.
@@ -26,6 +27,7 @@ from datatrust.logger import get_logger
 from datatrust.pipeline import analyze_file
 from datatrust.reporting import render_html
 from datatrust.scoring import GRADE_MEANING
+from datatrust.storage import StorageError, open_repository
 
 logger = get_logger("cli")
 
@@ -189,6 +191,8 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--target", help="Column a model should predict (e.g. churned); adds class balance and leakage checks")
     parser.add_argument("--json", dest="json_out", help="Save the full analysis as JSON to this path")
     parser.add_argument("--html", dest="html_out", help="Save a shareable HTML report to this path")
+    parser.add_argument("--save", action="store_true",
+                        help="Store this analysis in the database configured in .env (MySQL or SQLite)")
     args = parser.parse_args(argv)
 
     try:
@@ -211,6 +215,16 @@ def run(argv: list[str] | None = None) -> int:
         out = _prepare(args.html_out)
         out.write_text(render_html(analysis), encoding="utf-8")
         print(f"HTML report saved to {out}  (open it in your browser)")
+    if args.save:
+        try:
+            repo = open_repository()
+            run_id = repo.save(analysis)
+            repo.db.close()
+        except StorageError as exc:
+            logger.error("%s", exc)
+            print(f"ERROR (database): {exc}", file=sys.stderr)
+            return 1
+        print(f"Saved as run #{run_id} in {repo.db.config.describe()}")
     return 0
 
 

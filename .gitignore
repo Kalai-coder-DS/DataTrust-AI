@@ -8,3 +8,5 @@ logs/*.log*
 reports/
 .idea/
 .vscode/
+# Local databases (SQLite fallback / tests)
+*.db

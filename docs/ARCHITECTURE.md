@@ -71,7 +71,7 @@ datatrust-ai/
 │   ├── scoring/                  # Ph 4: Data Trust Score, ML Readiness Score (traceable deductions)
 │   ├── pipeline.py               # Ph 5a: analyze_file() - one entry point for every phase
 │   ├── reporting/                # Ph 5a: self-contained HTML report
-│   ├── storage/                  # Ph 5: MySQL repository layer
+│   ├── storage/                  # Ph 5b: MySQL/SQLite repository layer
 │   ├── ml/                       # Ph 7: scikit-learn baseline models
 │   ├── explain/                  # Ph 8: SHAP
 │   └── genai/                    # Ph 9: plain-language explanations
@@ -291,3 +291,50 @@ says the assessment is partial.
 5. **Readable charts.** Scores as stat tiles; dimensions as single-hue bars; numeric columns
    as box plots built from the Phase 3 summary (no raw data needed); severity as icon +
    label + colour, never colour alone; light and dark mode.
+
+## 9. Phase 5b — Storing analyses in MySQL
+
+```
+datasets 1 ──< analysis_runs 1 ──< issues
+```
+
+| Table | One row per | Key columns |
+|---|---|---|
+| `datasets` | dataset (file name) | `name` (unique), `first_seen` |
+| `analysis_runs` | analysis | `analyzed_at`, `file_sha256`, scores, grades, 4 trust dimensions, `report_json` |
+| `issues` | quality issue in a run | `severity`, `issue_type`, `column_name`, `affected_rows` |
+
+| File | Purpose |
+|---|---|
+| `storage/database.py` | Connection (PyMySQL or sqlite3), `.env` loading, `?`→`%s` placeholders, transactions, friendly connection errors |
+| `storage/schema.py` | DDL for MySQL and SQLite |
+| `storage/repository.py` | `save`, `history`, `list_datasets`, `get_analysis`, `issues` |
+| `scripts/db.py` | Command-line access to stored runs |
+| `sql/*.sql` | Schema and example analytical queries for MySQL Workbench |
+
+### Key design decisions (interview talking points)
+
+1. **Repository pattern.** Only `repository.py` knows the tables. The CLI, the report and
+   (later) Django call its methods, so the storage can change without touching them.
+2. **Summary columns + full JSON.** Scores live in typed columns for fast, simple SQL
+   (trends, rankings); the full analysis is kept as JSON so any past report can be
+   re-rendered exactly (tested: the re-rendered HTML is identical).
+3. **File fingerprint (SHA-256).** Tells "the data changed" apart from "the same file analysed
+   again", so a score change can be attributed to the data.
+4. **Parameterised queries only.** No value is ever pasted into SQL text (SQL injection);
+   tested with a file named `x'; DROP TABLE issues; --.csv`. The one exception, the database
+   name in `CREATE DATABASE`, is validated to letters, digits and underscores.
+5. **Transactions.** A run and its issues are saved all-or-nothing; tested by forcing a
+   failure halfway and checking nothing was left behind.
+6. **Secrets outside the code.** Credentials come from `.env` (git-ignored) or real
+   environment variables (which win); the password is never printed, logged or in `repr`.
+7. **Tests on SQLite, production on MySQL.** Same repository code, different driver: tests
+   run anywhere in seconds with no server. MySQL is verified with the README checklist.
+
+### Known limitation found while testing: banded scoring has cliffs
+
+Removing the 15 duplicate rows from the dirty file raised trust by only **+0.2**: the
+duplicates fix gained +2.0, but with 500 instead of 515 rows, city's missing share became
+exactly 5.0% and crossed the LOW→MEDIUM band (−1.8). Severity bands make scores easy to
+explain but cause jumps near thresholds. A candidate improvement is proportional
+deductions (points scaled by % of rows affected), traded against simplicity.
