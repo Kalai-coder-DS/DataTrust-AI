@@ -88,6 +88,16 @@ def _target_values(series: pd.Series, task: str, settings: Settings) -> pd.Serie
     return y
 
 
+def _plain_text(s: pd.Series) -> pd.Series:
+    """
+    Text values as plain Python str, missing as np.nan, dtype object. Built element by element
+    on purpose: with pandas 3.1, .map() on a 'string' column keeps pd.NA for missing values,
+    and scikit-learn's imputer then fails with "boolean value of NA is ambiguous" (found on
+    Windows with pandas 3.1.1; pandas 3.0 did not show it).
+    """
+    return pd.Series([np.nan if pd.isna(v) else str(v) for v in s], index=s.index, dtype=object)
+
+
 def _merge_spellings(s: pd.Series) -> tuple[pd.Series, int]:
     """'Chennai' / 'chennai ' -> the most common spelling of that label. Returns (series, cells changed)."""
     text = s.astype("string")
@@ -172,7 +182,7 @@ def prepare(df: pd.DataFrame, analysis: dict, target: str, clean: bool,
             if clean and col in variant_cols:
                 s, changed = _merge_spellings(s)
                 spelling_cells += changed
-            X[col] = s.map(lambda v: np.nan if pd.isna(v) else str(v)).astype(object)
+            X[col] = _plain_text(s)
             categorical.append(col)
 
     if clean:
@@ -190,6 +200,10 @@ def prepare(df: pd.DataFrame, analysis: dict, target: str, clean: bool,
         if clean:
             steps.append(f"Dropped {int((~keep).sum())} row(s) with no usable target value.")
     X, y = X[keep], y[keep]
+    if task == "classification":
+        y = _plain_text(y)          # labels as plain str: no pd.NA can reach scikit-learn
+    else:
+        y = y.astype(float)
 
     return PreparedData(X=X, y=y, numeric=numeric, categorical=categorical, steps=steps,
                         excluded=excluded, rows_in=rows_in, rows_used=len(X))

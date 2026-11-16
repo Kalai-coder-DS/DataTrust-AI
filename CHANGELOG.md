@@ -32,7 +32,11 @@ Each phase is also a Git tag (`git checkout phase-2` to see the project as it wa
 3. `price = 3x + noise` flags `x` as possible leakage. Dropping it automatically took R² from 0.97 to 0, so
    cleaning keeps such columns and a third run measures the model without them; a person decides.
 
-**Tests:** 273 → 302 (with Django installed; the Django page tests inside them: 25 → 28)
+4. On Windows with pandas 3.1.1, merged label spellings kept pandas' `pd.NA` for missing values and
+   scikit-learn failed with "boolean value of NA is ambiguous" (pandas 3.0 did not show it). Text columns
+   and the target are now built as plain Python values; a test checks no `pd.NA` reaches scikit-learn.
+
+**Tests:** 273 → 303 (with Django installed; the Django page tests inside them: 25 → 28)
 
 ## Phase 6 — Django web app
 
