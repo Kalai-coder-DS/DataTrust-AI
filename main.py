@@ -1,14 +1,15 @@
 """
 main.py
 
-Command-line entry point (Phase 1: profiling, Phase 2: quality issues, Phase 3: statistics).
+Command-line entry point (Phase 1: profiling, Phase 2: quality issues, Phase 3: statistics,
+Phase 4: Data Trust and ML Readiness scores).
 
     python main.py data/sample/customers_dirty.csv
     python main.py data/sample/customers_dirty.csv --json reports/profile.json
     python main.py data/sample/customers_dirty.csv --target churned
 
 The CLI is a thin layer: it wires CSVLoader -> DataProfiler -> QualityAnalyzer -> StatisticsAnalyzer
-and formats output.
+-> score_dataset and formats output.
 All logic lives in the `datatrust` package, so the Django app (Phase 6) will call
 exactly the same classes.
 """
@@ -24,6 +25,7 @@ from datatrust.ingestion import CSVLoader
 from datatrust.logger import get_logger
 from datatrust.profiling import DataProfiler
 from datatrust.quality import QualityAnalyzer
+from datatrust.scoring import GRADE_MEANING, score_dataset
 from datatrust.stats import StatisticsAnalyzer
 
 logger = get_logger("cli")
@@ -151,6 +153,37 @@ def format_statistics(stats: dict) -> str:
     return "\n".join(lines)
 
 
+def _bar(score: float, width: int = 20) -> str:
+    filled = round(score / 100 * width)
+    return "#" * filled + "." * (width - filled)
+
+
+def format_scores(scores: dict) -> str:
+    lines = [" SCORES", "=" * 78]
+    for key in ("trust", "ml_readiness"):
+        r = scores[key]
+        lines.append(f" {r['name']:<20} {r['score']:>5} / 100   grade {r['grade']} ({GRADE_MEANING[r['grade']]})")
+        for d in r["dimensions"]:
+            label = d["name"].replace("_", " ")
+            lines.append(f"   {label:<17} [{_bar(d['score'])}] {d['score']:>5}  (weight {d['weight']:.0%})")
+        for cap in r["caps"]:
+            lines.append(f"   ! {cap}")
+        lines.append("")
+    actions = scores["ml_readiness"]["top_actions"]
+    if actions:
+        lines.append(" TOP ACTIONS (biggest score gain first):")
+        for i, a in enumerate(actions, start=1):
+            lines.append(f"  {i}. +{a['impact']:.1f} pts  {a['reason']}")
+            if a["recommendation"]:
+                lines.append(f"              -> {a['recommendation']}")
+    notes = scores["trust"]["notes"] + scores["ml_readiness"]["notes"]
+    if notes:
+        lines.append(" Notes:")
+        lines += [f"  - {n}" for n in notes]
+    lines.append("=" * 78)
+    return "\n".join(lines)
+
+
 def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="DataTrust AI - profile a CSV dataset")
     parser.add_argument("csv_path", help="Path to the CSV file")
@@ -163,22 +196,25 @@ def run(argv: list[str] | None = None) -> int:
         profile = DataProfiler().profile(result.df)
         quality = QualityAnalyzer().analyze(result.df, profile)
         stats = StatisticsAnalyzer().analyze(result.df, profile, target=args.target)
+        scores = score_dataset(quality, stats, profile, target=args.target)
     except (DataTrustError, ValueError) as exc:
         logger.error("%s", exc)
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
     load_summary, profile_dict, quality_dict = result.summary(), profile.to_dict(), quality.to_dict()
-    stats_dict = stats.to_dict()
+    stats_dict, scores_dict = stats.to_dict(), scores.to_dict()
     print(format_report(load_summary, profile_dict))
     print(format_quality(quality_dict))
     print(format_statistics(stats_dict))
+    print(format_scores(scores_dict))
 
     if args.json_out:
         out = Path(args.json_out)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps({"file": load_summary, "profile": profile_dict,
-                                    "quality": quality_dict, "statistics": stats_dict}, indent=2, default=str))
+                                    "quality": quality_dict, "statistics": stats_dict,
+                                    "scores": scores_dict}, indent=2, default=str))
         print(f"Profile saved to {out}")
     return 0
 

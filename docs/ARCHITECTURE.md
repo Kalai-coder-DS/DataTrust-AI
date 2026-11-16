@@ -68,7 +68,7 @@ datatrust-ai/
 │   ├── profiling/profiler.py     # Ph 1: structure & semantic types
 │   ├── quality/                  # Ph 2: missing, duplicates, invalid, consistency, outliers
 │   ├── stats/                    # Ph 3: summaries, distributions, associations, target balance
-│   ├── scoring/                  # Ph 4: Data Trust Score, ML Readiness Score
+│   ├── scoring/                  # Ph 4: Data Trust Score, ML Readiness Score (traceable deductions)
 │   ├── reporting/                # Ph 5: JSON + HTML reports
 │   ├── storage/                  # Ph 5: MySQL repository layer
 │   ├── ml/                       # Ph 7: scikit-learn baseline models
@@ -210,3 +210,62 @@ with Python's built-in `statistics` module).
 - Full pipeline takes ~9 s on 206k rows (pairwise associations, repeated parsing). Fine for
   now; optimisation is part of Phase 10 hardening.
 - Associations are pairwise only; Phase 4 adds leakage hints (near-perfect target association).
+
+## 7. Phase 4 — Data Trust Score and ML Readiness Score
+
+Package `datatrust/scoring/`. Core rule: **every point lost is a `Deduction` that names its
+cause**, and deductions add up exactly to the score (tested).
+
+### Data Trust Score — "can I trust what this data says?"
+
+| Dimension | Weight | Phase 2 issues charged here |
+|---|---|---|
+| Completeness | 30% | missing values, disguised missing, empty columns |
+| Uniqueness | 20% | duplicate rows, conflicting duplicate IDs, duplicates hidden by an ID |
+| Validity | 30% | type mismatch, invalid dates, out-of-range values |
+| Consistency | 20% | inconsistent label spelling, numbers written as words |
+
+- Each dimension: `100 - Σ points`, floored at 0. Points per issue by severity:
+  **LOW 4, MEDIUM 10, HIGH 20, CRITICAL 35**.
+- Score = weighted average. Grade: A ≥ 90, B ≥ 80, C ≥ 70, D ≥ 60, F < 60.
+- Outliers and constant columns are **not** trust problems (values are correct); they count in ML readiness.
+
+Worked example (dirty sample file):
+`0.3×76 + 0.2×90 + 0.3×70 + 0.2×90 = 79.8 → C`
+
+### ML Readiness Score — "could I train a reliable model on this today?"
+
+| Dimension | Weight | What it measures |
+|---|---|---|
+| Data trust | 40% | the Data Trust Score |
+| Sample size | 15% | min(score by total rows, score by rows per feature) |
+| Feature quality | 20% | constant (−15) / near-constant (−5) columns, redundant columns (−5 per droppable column), free text (−5), outliers (−2) |
+| Target | 25% | class imbalance (moderate −10, high −35, severe −65), missing target values, **leakage** (feature–target association ≥ 0.95: −40) |
+
+Without `--target`, the target dimension is skipped, weights are rescaled, and the result
+says the assessment is partial.
+
+### Key design decisions (interview talking points)
+
+1. **Explainable over clever.** Fixed, documented points per severity rather than a learned
+   or opaque formula: anyone can recompute the score by hand from the issue list.
+2. **Each problem charged once.** Repeated IDs caused purely by duplicate rows cost nothing
+   extra.
+3. **Caps for things averages hide.**
+   - A CRITICAL issue caps trust at 69 (D): an unusable column must not be averaged away.
+   - ML Readiness ≤ Data Trust: *a model can't be more trustworthy than its data*. Without
+     this, the dirty file scored Trust C but ML B. While capped, Top Actions show only trust
+     fixes (other fixes can't move the score until trust improves), with their full impact.
+   - A single-class target caps ML readiness at 40 (F).
+4. **Redundancy charged per droppable column, not per pair.** Three near-identical columns
+   form three pairs but only two columns are redundant (greedy selection, strongest first).
+5. **Top actions ranked by impact** = points × dimension weight: the exact score gain from
+   fixing that one problem.
+6. **Leakage hint.** A feature that predicts the target almost perfectly usually contains
+   the answer; it inflates test scores and fails in production.
+
+### Known limitations (planned)
+
+- Weights and points are sensible defaults, not learned; Phase 7 (baseline models) will
+  check empirically whether higher ML readiness really means better models.
+- Leakage detection is association-based; time-based leakage needs domain knowledge.

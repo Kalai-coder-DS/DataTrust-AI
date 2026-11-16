@@ -111,6 +111,22 @@ class Settings:
     # Categories below this share of rows are "rare" (models learn little from them).
     rare_category_pct: float = 1.0
 
+    # ---------- Scoring (Phase 4) ----------
+    # Points deducted from a dimension per issue, by severity.
+    severity_points: tuple[tuple[str, float], ...] = (
+        ("low", 4.0), ("medium", 10.0), ("high", 20.0), ("critical", 35.0),
+    )
+    # Data Trust Score dimension weights (must sum to 1).
+    trust_weights: tuple[tuple[str, float], ...] = (
+        ("completeness", 0.30), ("uniqueness", 0.20), ("validity", 0.30), ("consistency", 0.20),
+    )
+    # ML Readiness Score dimension weights (must sum to 1; renormalised if no target is given).
+    ml_weights: tuple[tuple[str, float], ...] = (
+        ("data_trust", 0.40), ("sample_size", 0.15), ("feature_quality", 0.20), ("target", 0.25),
+    )
+    # A feature associated with the target at least this strongly may be leaking the answer.
+    leakage_threshold: float = 0.95
+
     # ---------- Logging ----------
     log_dir: Path = PROJECT_ROOT / "logs"
     log_level: str = field(default_factory=lambda: os.getenv("DATATRUST_LOG_LEVEL", "INFO").upper())

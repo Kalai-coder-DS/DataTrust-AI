@@ -3,6 +3,25 @@
 What changed in each phase, so you can see at a glance which files are new or modified.
 Each phase is also a Git tag (`git checkout phase-2` to see the project as it was).
 
+## Phase 4 — Data Trust Score and ML Readiness Score
+
+**New files**
+- `datatrust/scoring/__init__.py` — package entry point (`score_dataset`)
+- `datatrust/scoring/models.py` — `Deduction`, `DimensionScore`, `ScoreResult`, grades A–F
+- `datatrust/scoring/trust.py` — Data Trust Score: completeness, uniqueness, validity, consistency
+- `datatrust/scoring/ml_readiness.py` — ML Readiness Score: data trust, sample size, feature quality, target
+- `tests/test_scoring.py` — 36 unit tests (traceability, caps, leakage, imbalance, redundancy)
+- `tests/test_scoring_integration.py` — 4 tests, incl. dirty-file scores derived by hand
+
+**Modified files**
+- `datatrust/config.py` — Phase 4 settings (severity points, dimension weights, leakage threshold)
+- `main.py` — new SCORES section and TOP ACTIONS; scores added to `--json`
+- `README.md`, `docs/ARCHITECTURE.md`, `CHANGELOG.md`
+
+**Not changed:** ingestion, profiling, quality, stats.
+
+**Tests:** 162 → 202
+
 ## Phase 3 fix — redundancy for label and mixed pairs
 
 Found by running on the real CarPrice data: `fueltype ~ fuelsystem` (Cramér's V 0.985) and

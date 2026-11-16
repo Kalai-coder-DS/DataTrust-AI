@@ -4,7 +4,7 @@
 
 Upload a CSV and find out whether it can be trusted — and whether it's ready for Machine Learning.
 
-> Status: **Phase 3 — Statistical analysis** (Phases 1–2 ✅ verified).
+> Status: **Phase 4 — Data Trust Score & ML Readiness Score** (Phases 1–3 ✅ verified).
 > What changed in each phase: [CHANGELOG.md](CHANGELOG.md)
 > See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the architecture and the full phase plan.
 
@@ -30,16 +30,16 @@ python scripts/run_quality.py path/to/your_data.csv  # export issues to reports/
 python -m pytest                                     # run all tests
 ```
 
-## Phase 3 verification checklist
+## Phase 4 verification checklist
 
-- [ ] `python -m pytest` → **160 passed**
-- [ ] `python main.py data/sample/customers_dirty.csv --target churned` → new **STATISTICAL SUMMARY**:
-  - `age`: 10 invalid values excluded from the statistics
-  - `monthly_spend`: mean ≈ 7,003 but median ≈ 2,181 (outliers pull the mean, not the median)
-  - `annual_income ~ monthly_spend`: Spearman ≈ 0.62 but Pearson ≈ 0.02 (outliers break Pearson)
-  - Target `churned`: classification, imbalance ratio 1.65 → MODERATE
-- [ ] Your data: `python main.py ../../CarPrice_Assignment.csv --target price` and
-      `python main.py ../../insurance.csv --target charges`
+- [ ] `python -m pytest` → **202 passed**
+- [ ] `python main.py data/sample/customers_clean.csv --target churned` → **Trust 100 (A)**, **ML Readiness 95.6 (A)**
+- [ ] `python main.py data/sample/customers_dirty.csv --target churned` →
+  - **Trust 79.8 (C)**: completeness 76, uniqueness 90, validity 70, consistency 90
+  - **ML Readiness 79.8 (C)**, capped at the trust score (uncapped 84.1)
+  - TOP ACTIONS list the trust fixes, each worth +3.0 points
+- [ ] Your data: `python main.py ../../insurance.csv --target charges` and
+      `python main.py ../../CarPrice_Assignment.csv --target price`
 
 On Windows, if `python` points to another installation, use `.venv\Scripts\python.exe` instead of `python`.
 
