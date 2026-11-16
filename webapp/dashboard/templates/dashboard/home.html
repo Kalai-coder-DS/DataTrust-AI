@@ -1,0 +1,47 @@
+{% extends "dashboard/base.html" %}
+{% load humanize %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<header class="page">
+  <p class="eyebrow">Dashboard</p>
+  <h1>Your datasets</h1>
+  <p class="sub">Latest Data Trust and ML Readiness scores for every dataset you have analysed.</p>
+</header>
+
+{% if datasets %}
+<div class="tiles">
+  <section><p class="stat"><span class="stat-num">{{ total_datasets|intcomma }}</span></p><p class="stat-label">datasets</p></section>
+  <section><p class="stat"><span class="stat-num">{{ total_runs|intcomma }}</span></p><p class="stat-label">analyses run</p></section>
+</div>
+
+<section>
+  <h2>Datasets <span class="muted small">most recently analysed first</span></h2>
+  <div class="scroll"><table>
+    <thead><tr>
+      <th>Dataset</th><th class="num">Runs</th><th>Last analysed (UTC)</th>
+      <th class="num">Data Trust</th><th>Grade</th><th class="num">ML Readiness</th><th>Grade</th>
+    </tr></thead>
+    <tbody>
+    {% for d in datasets %}
+      <tr>
+        <td class="name"><a href="{% url 'dashboard:dataset' d.name %}">{{ d.name }}</a></td>
+        <td class="num">{{ d.runs }}</td>
+        <td>{{ d.last_analyzed }}</td>
+        <td class="num">{{ d.trust_score|floatformat:1 }}</td>
+        <td><span class="badge {{ d.trust.css }}">{{ d.trust.letter }} · {{ d.trust.meaning }}</span></td>
+        <td class="num">{{ d.ml_score|floatformat:1 }}</td>
+        <td><span class="badge {{ d.ml.css }}">{{ d.ml.letter }} · {{ d.ml.meaning }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+<p class="buttons"><a class="button primary" href="{% url 'dashboard:upload' %}">Analyse another CSV</a></p>
+{% else %}
+<section class="empty">
+  <h2>No datasets yet</h2>
+  <p class="muted">Upload a CSV to get its Data Trust Score, ML Readiness Score and a full report.</p>
+  <p class="buttons" style="justify-content:center"><a class="button primary" href="{% url 'dashboard:upload' %}">Analyse a CSV</a></p>
+</section>
+{% endif %}
+{% endblock %}

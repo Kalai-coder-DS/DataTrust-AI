@@ -75,7 +75,8 @@ datatrust-ai/
 │   ├── ml/                       # Ph 7: scikit-learn baseline models
 │   ├── explain/                  # Ph 8: SHAP
 │   └── genai/                    # Ph 9: plain-language explanations
-├── webapp/                       # Ph 6: Django project
+│   ├── web/                      # Ph 6: framework-free page logic for Django (services, charts)
+├── webapp/                       # Ph 6: Django project (manage.py, datatrust_site/, dashboard/)
 ├── scripts/generate_sample_data.py
 ├── data/sample/                  # reproducible test datasets + manifest
 ├── tests/                        # pytest suite, mirrors datatrust/
@@ -338,3 +339,54 @@ duplicates fix gained +2.0, but with 500 instead of 515 rows, city's missing sha
 exactly 5.0% and crossed the LOW→MEDIUM band (−1.8). Severity bands make scores easy to
 explain but cause jumps near thresholds. A candidate improvement is proportional
 deductions (points scaled by % of rows affected), traded against simplicity.
+
+## 10. Phase 6 — Django web app
+
+```
+browser ──► Django view (webapp/dashboard/views.py)      parse request, render template
+                 │
+                 ▼
+            datatrust.web (services.py, charts.py)          all page logic, no Django imports
+                 │                         │
+                 ▼                         ▼
+            pipeline.analyze_file     storage.AnalysisRepository ──► MySQL
+```
+
+| Page | URL | Data from |
+|---|---|---|
+| Dashboard | `/` | `dashboard_page` → `repo.list_datasets()` |
+| Analyse a CSV | `/upload/` | `analyze_upload` → `analyze_file` + `repo.save` |
+| Dataset history | `/datasets/<name>/` | `dataset_page` → `repo.history()` + `trend_svg` |
+| Run | `/runs/<id>/` | `run_page` → `repo.get_analysis()` |
+| Full report / JSON | `/runs/<id>/report/`, `/runs/<id>/json/` | `stored_analysis` → `render_html` / JSON |
+
+### Key design decisions (interview talking points)
+
+1. **Option B: no Django ORM models.** The tables already have one owner, `repository.py`. Mirroring them
+   as `managed=False` models would mean two definitions to keep in sync and two ways to write data.
+   Cost: no Django admin. `DATABASES = {}`; tests use `SimpleTestCase`.
+2. **Thin views, framework-free services.** Each view opens a repository, calls one function in
+   `datatrust.web`, renders a template. The logic is tested with plain pytest; Django tests check the wiring.
+3. **Templates checked against real data.** Django renders a misspelt variable as an empty string, so a
+   page can return 200 and still be wrong. `tests/test_webapp.py` resolves every variable, loop, include
+   and `{% url %}` in the templates against page data from a real analysis (and is itself tested on typos).
+4. **Errors by cause.** Bad upload → form again with the message (400); unknown run or dataset → 404;
+   database unreachable → 503 page with the password-free `StorageError` message, never a stack trace.
+   `RunNotFound` (a `StorageError`) separates the first two database cases.
+5. **Upload safety.** Only the base name is kept (Windows browsers send full paths), control characters are
+   removed, the size limit is enforced while streaming (the declared size can lie), the file goes to a private
+   temp folder and is deleted after analysis. Its original name becomes the dataset name, so web and CLI
+   runs of the same file share one history.
+6. **Defence in depth against XSS.** Django autoescaping for every value, plus a strict
+   Content-Security-Policy (no scripts at all), `X-Frame-Options: DENY`, `nosniff`, CSRF on the upload form.
+   Tested with a file named `<img src=x onerror=alert(1)>.csv` containing a `<script>` column.
+7. **One connection per request.** PyMySQL connections are not thread-safe; each request opens and closes its
+   own. The schema is created once per process (first request), not on every request.
+
+### Known limitations (planned)
+
+- Analysis runs inside the request: fine for the sample files (< 1 s), ~9 s for 206k rows. A background
+  task queue is a Phase 10 hardening item.
+- No login: anyone who can reach the server can see every dataset. Fine for `runserver` on your own
+  machine; needed before any shared deployment.
+- Per-column validation rules in the UI (noted in Phase 2) are not built yet.

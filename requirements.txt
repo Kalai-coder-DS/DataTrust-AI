@@ -3,3 +3,4 @@ pandas>=2.1
 numpy>=1.26
 pytest>=8.0
 PyMySQL>=1.1      # Phase 5b: talk to MySQL (pure Python, easy to install on Windows)
+Django>=5.2.8     # Phase 6: web app (5.2 LTS; 5.2.8+ supports Python 3.14)

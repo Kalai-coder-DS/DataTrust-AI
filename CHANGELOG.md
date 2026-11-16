@@ -3,6 +3,30 @@
 What changed in each phase, so you can see at a glance which files are new or modified.
 Each phase is also a Git tag (`git checkout phase-2` to see the project as it was).
 
+## Phase 6 — Django web app
+
+Decision: **Option B** — Django calls the existing `datatrust/storage` repository; no Django ORM
+models, no migrations, no second definition of the tables.
+
+**New files**
+- `datatrust/web/services.py` — framework-free page logic: upload checks, analyse + save,
+  data for every page, one DB connection per request
+- `datatrust/web/charts.py` — score-history chart (inline SVG, no JavaScript)
+- `webapp/manage.py`, `webapp/datatrust_site/` (settings, urls, wsgi) — Django project
+- `webapp/dashboard/` — views, form, URLs, CSP middleware, 7 templates, Django tests
+- `tests/test_web_services.py` — 30 tests: uploads, names, size limits, pages, chart
+- `tests/test_webapp.py` — template checks against real page data (no Django needed) +
+  runs `manage.py check` and the Django page tests when Django is installed
+
+**Modified files**
+- `datatrust/storage/repository.py` — `RunNotFound` (subclass of `StorageError`): "no such run"
+  (404) vs "database down" (503)
+- `datatrust/reporting/html_report.py` — public names for grade/severity labels, shared with the web pages
+- `requirements.txt` — adds `Django>=5.2.8`
+- `README.md`, `docs/ARCHITECTURE.md`, `CHANGELOG.md`
+
+**Tests:** 235 → 271 without Django (+2 that run when Django is installed, covering 25 Django page tests)
+
 ## Phase 5b — Store analyses in MySQL
 
 **New files**
