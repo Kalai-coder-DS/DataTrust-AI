@@ -28,6 +28,11 @@
       {% for e in form.target.errors %}<p class="help" role="alert"><b>{{ e }}</b></p>{% endfor %}
     </div>
 
+    <div class="field">
+      <label class="check" for="{{ form.baseline.id_for_label }}">{{ form.baseline }} {{ form.baseline.label }}</label>
+      <p class="help">{{ form.baseline.help_text }}</p>
+    </div>
+
     <button class="button primary" type="submit">Analyse</button>
     <p class="help">Large files take a few seconds; the page loads when the analysis is done.</p>
   </form>

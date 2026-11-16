@@ -127,6 +127,16 @@ class Settings:
     # A feature associated with the target at least this strongly may be leaking the answer.
     leakage_threshold: float = 0.95
 
+    # ---------- Phase 7: baseline model ----------
+    # Rows used for training (a random, class-stratified sample above this): keeps big files fast.
+    ml_max_rows: int = field(default_factory=lambda: _env_int("DATATRUST_ML_MAX_ROWS", 20_000))
+    ml_cv_folds: int = 5            # cross-validation folds
+    ml_cv_repeats: int = 3          # repeat the k folds with new shuffles (small files only): steadier scores
+    ml_repeat_max_rows: int = 5_000 # above this, one round of k folds (big files are steady and slow)
+    ml_min_rows: int = 30           # fewer usable rows than this: no model is trained
+    ml_random_state: int = 0        # same data -> same scores, every run
+    ml_max_categories: int = 20     # one-hot columns per categorical feature (rarer labels grouped)
+
     # ---------- Logging ----------
     log_dir: Path = PROJECT_ROOT / "logs"
     log_level: str = field(default_factory=lambda: os.getenv("DATATRUST_LOG_LEVEL", "INFO").upper())

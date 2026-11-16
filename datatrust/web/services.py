@@ -24,6 +24,7 @@ from typing import Iterable, Iterator
 from datatrust.config import DEFAULT_SETTINGS, Settings
 from datatrust.exceptions import DataTrustError
 from datatrust.logger import get_logger
+from datatrust.ml.present import baseline_view
 from datatrust.pipeline import analyze_file
 from datatrust.reporting.html_report import GRADE_CLASS, GRADE_MEANING, SEVERITY_DISPLAY
 from datatrust.storage import AnalysisRepository, Database, DBConfig, RunNotFound, load_env_file, open_repository
@@ -120,11 +121,18 @@ def analyze_upload(
     target: str | None = None,
     size: int | None = None,
     settings: Settings = DEFAULT_SETTINGS,
+    baseline: bool = False,
 ) -> int:
     """
-    Save the uploaded bytes to a private temporary folder under their original name, run the
-    full pipeline (the same analyze_file the CLI uses), store the result, delete the file.
+    Save the uploaded bytes to a private temporary folder, run the full pipeline (the same
+    analyze_file the CLI uses) under the ORIGINAL file name, store the result, delete the file.
     Returns the new run id.
+
+    The file on disk is always called 'upload.csv', never the uploaded name: a name that is
+    legal on the uploader's computer can be illegal on the server (Windows forbids ? < > : * | "
+    and names like CON.csv). Found by running the Django tests on Windows.
+
+    baseline=True also trains the Phase 7 baseline model (only when a target is given).
     """
     name = validate_upload(file_name, size, settings)
     target = (target or "").strip() or None
@@ -141,16 +149,15 @@ def analyze_upload(
         if written == 0:
             raise UploadRejected(f"'{name}' is empty.")
         try:
-            analysis = analyze_file(path, target=target)
+            analysis = analyze_file(path, target=target, baseline=baseline and target is not None, name=name)
         except ValueError as exc:            # invalid target column
             raise UploadRejected(str(exc)) from exc
         except UploadRejected:
             raise
         except DataTrustError as exc:        # unreadable / empty / malformed file
-            raise UploadRejected(str(exc)) from exc
+            raise UploadRejected(str(exc).replace(TEMP_FILE_NAME, name)) from exc
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
-    analysis["file"]["file_name"] = name
     run_id = repo.save(analysis)             # StorageError is NOT an upload problem: let it through
     logger.info("Web upload %s analysed and saved as run #%s", name, run_id)
     return run_id
@@ -247,4 +254,5 @@ def run_page(repo: AnalysisRepository, run_id: int) -> dict:
             for s in SEVERITY_ORDER
         ],
         "total_issues": q["total_issues"],
+        "baseline": baseline_view(a.get("ml")),
     }

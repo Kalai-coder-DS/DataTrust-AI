@@ -2,13 +2,15 @@
 main.py
 
 Command-line entry point (Phase 1: profiling, Phase 2: quality issues, Phase 3: statistics,
-Phase 4: Data Trust and ML Readiness scores, Phase 5a: HTML report, Phase 5b: --save to MySQL).
+Phase 4: Data Trust and ML Readiness scores, Phase 5a: HTML report, Phase 5b: --save to MySQL,
+Phase 7: --baseline model on raw vs cleaned data).
 
     python main.py data/sample/customers_dirty.csv
     python main.py data/sample/customers_dirty.csv --json reports/profile.json
     python main.py data/sample/customers_dirty.csv --target churned
     python main.py data/sample/customers_dirty.csv --target churned --html reports/dirty.html
     python main.py data/sample/customers_dirty.csv --target churned --save   # store in MySQL
+    python main.py data/sample/customers_dirty.csv --target churned --baseline  # Phase 7: train a model
 
 The CLI is a thin layer: datatrust.pipeline.analyze_file runs every phase, and this
 file only formats the result for the terminal / saves JSON and HTML.
@@ -24,6 +26,7 @@ from pathlib import Path
 
 from datatrust.exceptions import DataTrustError
 from datatrust.logger import get_logger
+from datatrust.ml.present import baseline_view
 from datatrust.pipeline import analyze_file
 from datatrust.reporting import render_html
 from datatrust.scoring import GRADE_MEANING
@@ -185,6 +188,31 @@ def format_scores(scores: dict) -> str:
     return "\n".join(lines)
 
 
+def format_baseline(ml: dict) -> str:
+    v = baseline_view(ml)
+    lines = [" BASELINE MODEL (does cleaning change what a model learns?)", "=" * 78]
+    if v["status"] != "ok":
+        lines.append(f" Not trained: {v['reason']}")
+        return "\n".join(lines + ["=" * 78])
+    lines.append(f" Predicting '{v['target']}' ({v['task']}) - {v['metric_label']}: {v['metric_about']}")
+    for b in v["bars"]:
+        lines.append(f"  {b['label']:<16}{_bar(b['width'])} {b['text']:>8}")
+    lines.append("-" * 78)
+    width = max(16, (76 - 22) // len(v["columns"]))
+    lines.append(" " + " " * 22 + "".join(f"{c[:width - 1]:>{width}}" for c in v["columns"]))
+    for r in v["table"]:
+        lines.append(f" {r['label'][:21]:<22}" + "".join(f"{c[:width - 1]:>{width}}" for c in r["cells"]))
+    lines.append("-" * 78)
+    lines += [f" * {t}" for t in v["verdict"]]
+    if v["steps"]:
+        lines.append(" Cleaning applied:")
+        lines += [f"   - {t}" for t in v["steps"]]
+    lines += [f"   ({n})" for n in v["notes"]]
+    lines.append(f" {v['footnote']}")
+    lines.append("=" * 78)
+    return "\n".join(lines)
+
+
 def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="DataTrust AI - analyse the quality and ML readiness of a CSV file")
     parser.add_argument("csv_path", help="Path to the CSV file")
@@ -193,10 +221,15 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--html", dest="html_out", help="Save a shareable HTML report to this path")
     parser.add_argument("--save", action="store_true",
                         help="Store this analysis in the database configured in .env (MySQL or SQLite)")
+    parser.add_argument("--baseline", action="store_true",
+                        help="Train a baseline model on --target, on the raw and on the cleaned data (Phase 7)")
     args = parser.parse_args(argv)
+    if args.baseline and not args.target:
+        print("ERROR: --baseline needs --target COLUMN (the column the model should predict).", file=sys.stderr)
+        return 2
 
     try:
-        analysis = analyze_file(args.csv_path, target=args.target)
+        analysis = analyze_file(args.csv_path, target=args.target, baseline=args.baseline)
     except (DataTrustError, ValueError) as exc:
         logger.error("%s", exc)
         print(f"ERROR: {exc}", file=sys.stderr)
@@ -206,6 +239,8 @@ def run(argv: list[str] | None = None) -> int:
     print(format_quality(analysis["quality"]))
     print(format_statistics(analysis["statistics"]))
     print(format_scores(analysis["scores"]))
+    if "ml" in analysis:
+        print(format_baseline(analysis["ml"]))
 
     if args.json_out:
         out = _prepare(args.json_out)

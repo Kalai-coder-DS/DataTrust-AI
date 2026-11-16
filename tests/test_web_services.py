@@ -110,6 +110,39 @@ def test_upload_is_analysed_saved_and_cleaned_up(repo, sample_dir):
     assert analysis["scores"]["trust"]["score"] == 79.8      # same result as the CLI (ARCHITECTURE.md)
 
 
+@pytest.mark.parametrize("name", ["my data #1?.csv", "<img src=x onerror=alert(1)>.csv",
+                                  'a:b*c|d"e.csv', "CON.csv", "trailing dot..csv"])
+def test_names_illegal_on_windows_never_touch_the_disk(repo, sample_dir, monkeypatch, name):
+    """Found on Windows: the uploaded name was used as the temp file name -> OSError [Errno 22]."""
+    import datatrust.web.services as services
+    seen = []
+    real = services.analyze_file
+    monkeypatch.setattr(services, "analyze_file", lambda path, **kw: seen.append(path) or real(path, **kw))
+    run_id = analyze_upload(chunks_of(sample_dir / "customers_clean.csv"), name, repo)
+    assert [p.name for p in seen] == ["upload.csv"]
+    assert stored_analysis(repo, run_id)["file"]["file_name"] == name
+    assert dataset_page(repo, name)["name"] == name
+
+
+def test_error_messages_use_the_uploaded_name(repo):
+    with pytest.raises(UploadRejected) as info:
+        analyze_upload([b"only_a_header\n"], "my_file.csv", repo)
+    assert "upload.csv" not in str(info.value)
+
+
+def test_baseline_option(repo, sample_dir):
+    plain = upload(repo, sample_dir / "customers_clean.csv", target="churned")
+    assert "ml" not in stored_analysis(repo, plain) and run_page(repo, plain)["baseline"] is None
+    no_target = analyze_upload(chunks_of(sample_dir / "customers_clean.csv"), "c.csv", repo, baseline=True)
+    assert "ml" not in stored_analysis(repo, no_target)          # needs a target: silently not trained
+    run_id = analyze_upload(chunks_of(sample_dir / "customers_dirty.csv"), "customers_dirty.csv", repo,
+                            target="churned", baseline=True)
+    view = run_page(repo, run_id)["baseline"]
+    assert view["status"] == "ok" and view["columns"] == ["Raw data", "After cleaning"]
+    assert [b["label"] for b in view["bars"]] == ["Guessing", "Raw data", "After cleaning"]
+    assert all(len(r["cells"]) == 2 for r in view["table"])
+
+
 def test_blank_target_means_no_target(repo, sample_dir):
     run_id = analyze_upload(chunks_of(sample_dir / "customers_clean.csv"), "customers_clean.csv", repo, target="   ")
     assert stored_analysis(repo, run_id)["meta"]["target"] is None

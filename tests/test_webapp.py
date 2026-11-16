@@ -202,7 +202,7 @@ def pages(sample_dir, tmp_path_factory):
     repo.init_schema()
     dirty = (sample_dir / "customers_dirty.csv").read_bytes()
     analyze_upload([dirty], "customers_dirty.csv", repo, target="churned")
-    run_id = analyze_upload([dirty], "customers_dirty.csv", repo, target="churned")
+    run_id = analyze_upload([dirty], "customers_dirty.csv", repo, target="churned", baseline=True)
     data = {
         "dashboard/home.html": dashboard_page(repo),
         "dashboard/dataset.html": dataset_page(repo, "customers_dirty.csv"),
