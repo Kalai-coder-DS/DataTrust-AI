@@ -3,6 +3,37 @@
 What changed in each phase, so you can see at a glance which files are new or modified.
 Each phase is also a Git tag (`git checkout phase-2` to see the project as it was).
 
+## Phase 7 — Baseline model (does cleaning change what a model learns?)
+
+**New files**
+- `datatrust/ml/features.py` — model input from the table: *raw* (as uploaded) or *cleaned* (the report's fixes)
+- `datatrust/ml/baseline.py` — gradient boosting vs guessing, repeated cross-validation, noise-aware verdict;
+  a third run without columns flagged as possible leakage
+- `datatrust/ml/present.py` — display values shared by the HTML report, the CLI and the web page
+- `webapp/dashboard/templates/dashboard/_baseline.html` — run page section
+- `tests/test_ml.py` — 22 tests with known answers (duplicates, leakage, regression signal, pure noise, seeds)
+
+**Modified files**
+- `datatrust/pipeline.py` — `analyze_file(..., baseline=False, name=None)`; result under `"ml"`
+- `datatrust/config.py` — `ml_*` settings (sample size, folds, repeats, seed)
+- `datatrust/reporting/html_report.py` — "Baseline model" section
+- `datatrust/web/services.py` — `baseline=` option; uploads analysed under their real name
+  (fixes the log line "Analysis complete for upload.csv"); error messages show the uploaded name
+- `webapp/dashboard/` — upload form checkbox, run page section, 3 Django tests
+- `main.py` — `--baseline`
+- `requirements.txt` — adds `scikit-learn`
+- `tests/test_web_services.py` — the 6 Windows file-name regression tests from Phase 6 fix + baseline option
+
+**Found while testing (kept as tests)**
+1. On the 515-row sample, the raw-vs-cleaned gap moved between 0.001 and 0.034 just by changing the random
+   seed. A fixed threshold would report noise as an effect, so changes are judged against ~2 standard errors.
+2. A pure-noise target scored 0.558 on 150 rows and was first called "signal": repeated folds are correlated,
+   so the standard error is now taken over one round of folds.
+3. `price = 3x + noise` flags `x` as possible leakage. Dropping it automatically took R² from 0.97 to 0, so
+   cleaning keeps such columns and a third run measures the model without them; a person decides.
+
+**Tests:** 273 → 302 (with Django installed; the Django page tests inside them: 25 → 28)
+
 ## Phase 6 — Django web app
 
 Decision: **Option B** — Django calls the existing `datatrust/storage` repository; no Django ORM

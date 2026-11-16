@@ -4,7 +4,7 @@
 
 Upload a CSV and find out whether it can be trusted — and whether it's ready for Machine Learning.
 
-> Status: **Phase 6 — Django web app** (Phases 1–5b ✅ verified).
+> Status: **Phase 7 — Baseline model** (Phases 1–6 ✅ verified).
 > What changed in each phase: [CHANGELOG.md](CHANGELOG.md)
 > See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the architecture and the full phase plan.
 
@@ -29,6 +29,7 @@ python main.py data/sample/customers_dirty.csv --target churned   # + class bala
 python main.py data/sample/customers_dirty.csv --target churned --html reports/dirty.html  # shareable report
 python main.py data/sample/customers_dirty.csv --target churned --save   # store in MySQL (see setup below)
 python scripts/db.py history customers_dirty.csv                        # score history of a dataset
+python main.py data/sample/customers_dirty.csv --target churned --baseline   # Phase 7: train a model, raw vs cleaned
 python scripts/run_quality.py path/to/your_data.csv  # export issues to reports/ (Excel-ready CSV + JSON)
 python -m pytest                                     # run all tests
 ```
@@ -44,6 +45,7 @@ python webapp/manage.py test dashboard               # the web app's page tests
 Pages: **Dashboard** (every dataset, latest scores) · **Analyse a CSV** (upload + optional target) ·
 **Dataset history** (score trend chart + every run) · **Run** (scores, top actions, issues) ·
 **Full report** (the Phase 5a HTML report) · **JSON download**.
+Tick **Also train a baseline model** on the upload form (needs a target) to add the Phase 7 section.
 The web app uses the same database as `--save` (your MySQL via `.env`), through
 `datatrust.storage`; Django itself has no models and no database of its own.
 
@@ -54,18 +56,17 @@ The web app uses the same database as `--save` (your MySQL via `.env`), through
    (`.env` is in `.gitignore`: it never goes to GitHub)
 3. `python scripts/db.py init` → creates database `datatrust` and its 3 tables
 
-## Phase 6 verification checklist
+## Phase 7 verification checklist
 
-- [ ] `pip install -r requirements.txt` → Django installs
-- [ ] `python -m pytest` → **all passed, 0 skipped** (with Django installed this also runs
-      `manage.py check` and every Django page test)
-- [ ] `python webapp/manage.py runserver`, open http://127.0.0.1:8000/ → dashboard lists the datasets already in MySQL
-- [ ] **Analyse a CSV** → upload `insurance.csv` with target `charges` → run page shows the same scores as the CLI
-- [ ] Upload it again → dataset page shows 2 runs, `no change`, `same data`, and the chart
-- [ ] Upload with target `nope` → the form comes back with "not found. Available: ..."
-- [ ] **Open full report** and **Download analysis (JSON)** on a run page
-- [ ] Stop MySQL80, reload the dashboard → "Database unavailable" page (not a crash); start it again
-- [ ] In MySQL Workbench: `SELECT * FROM analysis_runs ORDER BY id DESC LIMIT 5;` shows the web uploads
+- [ ] `pip install -r requirements.txt` → scikit-learn installs
+- [ ] `python -m pytest` → **all passed, 0 skipped** (takes about 2 minutes: models are trained)
+- [ ] `python main.py data/sample/customers_dirty.csv --target churned --baseline` → BASELINE MODEL section;
+      the change after cleaning is reported as *within the run-to-run noise*
+- [ ] `python main.py ../../CarPrice_Assignment.csv --target price --baseline` → strong R²; if a column is flagged as
+      possible leakage, a third column "Without ..." shows how much the model depends on it
+- [ ] Web app: upload `insurance.csv`, target `charges`, box ticked → run page has a **Baseline model** section,
+      and **Open full report** shows the same section
+- [ ] Upload with the box ticked but no target → analysis works, no model section (a model needs a target)
 
 On Windows, if `python` points to another installation, use `.venv\Scripts\python.exe` instead of `python`.
 
@@ -82,6 +83,7 @@ Override via environment variables (no code changes):
 | `DATATRUST_DEBUG` | 1 | Web app: `0` for production-style settings |
 | `DATATRUST_SECRET_KEY` | (dev key) | Web app: required when `DATATRUST_DEBUG=0` |
 | `DATATRUST_ALLOWED_HOSTS` | localhost,127.0.0.1 | Web app: host names it answers to |
+| `DATATRUST_ML_MAX_ROWS` | 20000 | Baseline model: rows used (a class-stratified sample above this) |
 
 ## Note on pandas versions
 

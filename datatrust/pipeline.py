@@ -27,13 +27,20 @@ from datatrust.stats import StatisticsAnalyzer
 logger = get_logger(__name__)
 
 
-def analyze_file(path: str | Path, target: str | None = None) -> dict:
+def analyze_file(path: str | Path, target: str | None = None, baseline: bool = False,
+                 name: str | None = None) -> dict:
     """
     Run every phase on a CSV file and return the full analysis as a JSON-serialisable dict.
+
+    baseline=True (Phase 7) also trains a baseline model on the target column, on the raw and
+    on the cleaned data; the result is under "ml". It needs a target.
+    name: the file name to report (the web app saves uploads under a safe temporary name).
 
     Raises DataTrustError for unusable files and ValueError for an invalid target.
     """
     result = CSVLoader().load(path)
+    if name:
+        result.file_name = name
     df = result.df
     profile = DataProfiler().profile(df)
     quality = QualityAnalyzer().analyze(df, profile)
@@ -41,7 +48,7 @@ def analyze_file(path: str | Path, target: str | None = None) -> dict:
     scores = score_dataset(quality, stats, profile, target=target)
     logger.info("Analysis complete for %s: trust %.1f, ML readiness %.1f",
                 result.file_name, scores.trust.score, scores.ml_readiness.score)
-    return {
+    analysis = {
         "meta": {
             "tool": "DataTrust AI",
             "version": __version__,
@@ -54,6 +61,10 @@ def analyze_file(path: str | Path, target: str | None = None) -> dict:
         "statistics": stats.to_dict(),
         "scores": scores.to_dict(),
     }
+    if baseline:
+        from datatrust.ml import run_baseline   # imported here: scikit-learn loads only when needed
+        analysis["ml"] = run_baseline(df, analysis, target)
+    return analysis
 
 
 def file_sha256(path: str | Path) -> str:

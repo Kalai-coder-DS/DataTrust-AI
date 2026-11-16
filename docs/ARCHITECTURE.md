@@ -72,7 +72,7 @@ datatrust-ai/
 │   ├── pipeline.py               # Ph 5a: analyze_file() - one entry point for every phase
 │   ├── reporting/                # Ph 5a: self-contained HTML report
 │   ├── storage/                  # Ph 5b: MySQL/SQLite repository layer
-│   ├── ml/                       # Ph 7: scikit-learn baseline models
+│   ├── ml/                       # Ph 7: baseline model, raw vs cleaned (features, baseline, present)
 │   ├── explain/                  # Ph 8: SHAP
 │   └── genai/                    # Ph 9: plain-language explanations
 │   ├── web/                      # Ph 6: framework-free page logic for Django (services, charts)
@@ -390,3 +390,47 @@ browser ──► Django view (webapp/dashboard/views.py)      parse request, re
 - No login: anyone who can reach the server can see every dataset. Fine for `runserver` on your own
   machine; needed before any shared deployment.
 - Per-column validation rules in the UI (noted in Phase 2) are not built yet.
+
+## 11. Phase 7 — Baseline model
+
+The scores say whether data is *healthy*; Phase 7 checks what that means for an actual model.
+
+| Run | Data | Why |
+|---|---|---|
+| Guessing | ignores features (most frequent class / mean) | the floor every model must beat |
+| Raw | as uploaded; only conversions a model needs (text numbers → numbers, dates → days) | what a hurried analyst gets |
+| Cleaned | the report's own fixes: duplicates (also hidden by an ID) removed, placeholders and impossible values → missing, label spellings merged, constant and redundant columns dropped | what following the report gets |
+| Without suspects | cleaned, minus columns flagged as possible target leakage | how much the model depends on them |
+
+| File | Purpose |
+|---|---|
+| `ml/features.py` | `prepare(df, analysis, target, clean)`: X, y, steps applied, columns not used and why |
+| `ml/baseline.py` | `run_baseline(df, analysis, target)`: cross-validated scores and verdict, never raises for data problems |
+| `ml/present.py` | display values shared by the report, CLI and web page |
+
+### Key design decisions (interview talking points)
+
+1. **A measuring instrument, not a model to deploy.** One fixed gradient-boosting model (100 trees, not tuned),
+   same seed every run: differences come from the data, not from tuning luck.
+2. **Fixes come from the analysis, not re-detection.** The cleaned run applies exactly what the report told the
+   user to fix, and lists each step with counts.
+3. **Fair metrics.** Balanced accuracy and macro F1 for classes (imbalance-proof; guessing = 1/k); R² and MAE for
+   numbers (guessing the mean = 0).
+4. **Noise-aware verdicts.** 5-fold CV repeated 3× on files ≤ 5,000 rows; a change or a claim of signal must exceed
+   ~2 standard errors (over one round of folds, since repeats are correlated). Tested across seeds.
+5. **Dirty data can score *better*.** Duplicate rows land in both training and test folds; a leaking column gives
+   the answer away. Tested: a pure-noise target with each row repeated 4× scores 0.99 raw, 0.56 de-duplicated.
+6. **A person confirms leakage.** Strong genuine predictors look like leakage statistically (`price = 3x` → `x` is
+   flagged). Cleaning keeps them; a third run shows the score without them and the verdict explains both readings.
+7. **Readiness ≠ signal.** Healthy data can still be useless for a target; the verdict says so when the model
+   barely beats guessing.
+8. **Fast enough for a web request.** Files over 20,000 rows are sampled (class-stratified); 60,000 rows ≈ 6 s.
+   Stored inside the analysis JSON, so history and re-rendered reports keep it; no schema change.
+
+### Known limitations (planned)
+
+- One model family. A linear model next to the boosting model would show which defects hurt *simpler* models
+  (the verdict mentions this; Phase 8 can add it alongside SHAP).
+- Outliers are not changed by cleaning (extreme ≠ wrong); their effect on the model is not measured separately.
+- Score history (dataset page, `sql/`) does not show the model score yet: it lives in the stored JSON only.
+- Time-based leakage and train/test drift need dates and domain knowledge; not attempted.

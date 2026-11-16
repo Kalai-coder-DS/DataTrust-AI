@@ -45,9 +45,11 @@ class WebTestCase(SimpleTestCase):
         self.addCleanup(reset_repository_state)
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
-    def upload(self, path=None, name=None, target="", content=None):
-        return self.client.post(reverse("dashboard:upload"),
-                                {"file": csv_upload(path, name, content), "target": target})
+    def upload(self, path=None, name=None, target="", content=None, baseline=False):
+        data = {"file": csv_upload(path, name, content), "target": target}
+        if baseline:
+            data["baseline"] = "on"
+        return self.client.post(reverse("dashboard:upload"), data)
 
     def upload_dirty(self) -> int:
         response = self.upload(SAMPLE_DIR / "customers_dirty.csv", target="churned")
@@ -132,6 +134,30 @@ class UploadTests(WebTestCase):
             r = self.upload(SAMPLE_DIR / "customers_clean.csv")
         self.assertEqual(r.status_code, 503)
         self.assertContains(r, "Database unavailable", status_code=503)
+
+
+class BaselineModelTests(WebTestCase):
+    def test_form_offers_the_baseline_ticked(self):
+        r = self.client.get(reverse("dashboard:upload"))
+        self.assertContains(r, 'name="baseline"')
+        self.assertContains(r, "checked")
+
+    def test_run_page_shows_the_baseline_model(self):
+        r = self.upload(SAMPLE_DIR / "customers_dirty.csv", target="churned", baseline=True)
+        self.assertEqual(r.status_code, 302)
+        page = self.client.get(r["Location"])
+        self.assertTemplateUsed(page, "dashboard/_baseline.html")
+        for text in ["Baseline model", "Guessing", "Raw data", "After cleaning", "Balanced accuracy",
+                     "Removed 15 duplicate row(s)", "within the run-to-run noise"]:
+            self.assertContains(page, text)
+        report = self.client.get(reverse("dashboard:report", args=[1]))
+        self.assertContains(report, "Baseline model")
+        data = json.loads(self.client.get(reverse("dashboard:json", args=[1])).content)
+        self.assertEqual(data["ml"]["status"], "ok")
+
+    def test_without_baseline_no_section(self):
+        r = self.upload(SAMPLE_DIR / "customers_dirty.csv", target="churned")
+        self.assertNotContains(self.client.get(r["Location"]), "Baseline model")
 
 
 class DatasetPageTests(WebTestCase):

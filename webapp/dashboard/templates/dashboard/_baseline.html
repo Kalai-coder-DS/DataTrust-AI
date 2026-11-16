@@ -1,0 +1,35 @@
+<section>
+  <h2>Baseline model <span class="muted small">does cleaning change what a model learns?</span></h2>
+  {% if baseline.status == "ok" %}
+  <p class="muted">Predicting <b>{{ baseline.target }}</b> ({{ baseline.task }}). {{ baseline.metric_label }}: {{ baseline.metric_about }}{% if baseline.change_text %} · change after cleaning <b>{{ baseline.change_text }}</b>{% endif %}.</p>
+  <div role="list">
+  {% for b in baseline.bars %}
+    <div class="dim mlbar" role="listitem" title="{{ b.label }}: {{ b.text }} ({{ b.note }})">
+      <span class="dim-name">{{ b.label }}</span>
+      <span class="track"><span class="fill" style="width:{{ b.width }}%"></span></span>
+      <span class="dim-val">{{ b.text }}</span>
+    </div>
+  {% endfor %}
+  </div>
+  <div class="verdict">{% for t in baseline.verdict %}<p>{{ t }}</p>{% endfor %}</div>
+  <div class="scroll"><table>
+    <thead><tr><th></th>{% for c in baseline.columns %}<th class="num">{{ c }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for r in baseline.table %}<tr><td>{{ r.label }}</td>{% for c in r.cells %}<td class="num">{{ c }}</td>{% endfor %}</tr>{% endfor %}
+    </tbody>
+  </table></div>
+  <h3>What cleaning changed</h3>
+  <ul>{% for s in baseline.steps %}<li>{{ s }}</li>{% empty %}<li>Nothing to change.</li>{% endfor %}</ul>
+  {% if baseline.excluded or baseline.dropped %}
+  <h3>Columns not used</h3>
+  <ul>
+    {% for e in baseline.excluded %}<li><code>{{ e.column }}</code>: {{ e.reason }}</li>{% endfor %}
+    {% for e in baseline.dropped %}<li><code>{{ e.column }}</code>: {{ e.reason }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  {% for n in baseline.notes %}<p class="cap">{{ n }}</p>{% endfor %}
+  <p class="cap">{{ baseline.footnote }}</p>
+  {% else %}
+  <p class="muted">Not trained: {{ baseline.reason }}</p>
+  {% endif %}
+</section>

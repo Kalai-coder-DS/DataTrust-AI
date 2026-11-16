@@ -250,6 +250,43 @@ def _profile(a: dict) -> str:
 <tbody>{rows}</tbody></table></div></section>"""
 
 
+def _baseline(a: dict) -> str:
+    """Phase 7: baseline model on raw vs cleaned data (only when the analysis includes one)."""
+    from datatrust.ml.present import baseline_view
+    v = baseline_view(a.get("ml"))
+    if v is None:
+        return ""
+    title = '<h2>Baseline model <span class="muted small">does cleaning change what a model learns?</span></h2>'
+    if v["status"] != "ok":
+        return f'<section>{title}<p class="muted">Not trained: {_e(v["reason"])}</p></section>'
+    bars = "".join(
+        f"""<div class="dim mlbar" title="{_e(b['label'])}: {_e(b['text'])} ({_e(b['note'])})">
+              <span class="dim-name">{_e(b['label'])}</span>
+              <span class="track"><span class="fill" style="width:{b['width']}%"></span></span>
+              <span class="dim-val">{_e(b['text'])}</span></div>"""
+        for b in v["bars"])
+    verdict = "".join(f"<p>{_e(t)}</p>" for t in v["verdict"])
+    head = "".join(f'<th class="num">{_e(c)}</th>' for c in v["columns"])
+    rows = "".join("<tr><td>" + _e(r["label"]) + "</td>" + "".join(f'<td class="num">{_e(c)}</td>' for c in r["cells"])
+                   + "</tr>" for r in v["table"])
+    steps = "".join(f"<li>{_e(x)}</li>" for x in v["steps"]) or "<li>Nothing to change.</li>"
+    unused = "".join(f"<li><code>{_e(e['column'])}</code>: {_e(e['reason'])}</li>" for e in v["excluded"] + v["dropped"])
+    notes = "".join(f'<p class="cap">{_e(n)}</p>' for n in v["notes"])
+    change = f' · change after cleaning <b>{_e(v["change_text"])}</b>' if v["change_text"] else ""
+    return f"""
+<section>{title}
+  <p class="muted">Predicting <b>{_e(v['target'])}</b> ({_e(v['task'])}). {_e(v['metric_label'])}: {_e(v['metric_about'])}{change}.</p>
+  <div class="dims">{bars}</div>
+  <div class="verdict">{verdict}</div>
+  <div class="scroll"><table><thead><tr><th></th>{head}</tr></thead>
+  <tbody>{rows}</tbody></table></div>
+  <h3>What cleaning changed</h3><ul>{steps}</ul>
+  {f'<h3>Columns not used</h3><ul>{unused}</ul>' if unused else ''}
+  {notes}
+  <p class="cap">{_e(v['footnote'])}</p>
+</section>"""
+
+
 def _notes(a: dict) -> str:
     notes = a["scores"]["trust"]["notes"] + a["scores"]["ml_readiness"]["notes"]
     warnings = a["file"]["warnings"]
@@ -298,6 +335,7 @@ th{text-align:left;color:var(--text-secondary);font-weight:600;border-bottom:1px
 td{border-bottom:1px solid var(--border);padding:8px;vertical-align:top}.num{text-align:right;font-variant-numeric:tabular-nums}
 .muted{color:var(--text-secondary)}.small{font-size:13px;font-weight:400}
 code{font-size:13px}
+h3{font-size:15px;margin:16px 0 6px}.mlbar{grid-template-columns:120px 1fr 64px}.verdict p{margin:10px 0}
 .box .whisker{stroke:var(--text-secondary);stroke-width:1.5}.box .iqr{fill:var(--series-1);opacity:.35;stroke:var(--series-1)}
 .box .median{stroke:var(--text-primary);stroke-width:2}
 footer{color:var(--text-secondary);font-size:13px;margin-top:24px}
@@ -318,6 +356,7 @@ def render_html(analysis: dict) -> str:
         + _numeric(analysis)
         + _categorical(analysis)
         + _relationships(analysis)
+        + _baseline(analysis)
         + _profile(analysis)
         + _notes(analysis)
     )

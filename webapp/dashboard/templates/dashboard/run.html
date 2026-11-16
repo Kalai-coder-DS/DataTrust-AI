@@ -35,6 +35,8 @@
   {% endif %}
 </section>
 
+{% if baseline %}{% include "dashboard/_baseline.html" %}{% endif %}
+
 <section>
   <h2>Data quality issues
     <span class="muted small">{{ total_issues }} found ·

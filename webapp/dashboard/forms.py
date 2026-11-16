@@ -17,3 +17,9 @@ class UploadForm(forms.Form):
         help_text="The column a model would predict, e.g. churned or charges. "
                   "Leave empty for a data-quality check only.",
     )
+    baseline = forms.BooleanField(
+        label="Also train a baseline model on the target (raw vs cleaned data)",
+        required=False,
+        initial=True,
+        help_text="Needs a target column. Adds about 5-30 seconds, depending on the file size.",
+    )
