@@ -312,3 +312,48 @@ def test_facts_carry_the_values_the_prompt_asks_for(analysis):
 def test_real_mistakes_fall_back_to_the_template(analysis):
     r = summarize(analysis, "ollama", environ={}, transport=FakeTransport(ollama_text=REAL_OLLAMA_TEXT))
     assert r["provider"] == "template" and "'seven problems'" in r["fallback_reason"]
+
+
+# ------------------------------------------------------------------ Phase 9 fix 2
+@pytest.mark.parametrize("ok", [
+    "There are no critical issues and no high-severity issues.",
+    "None of the problems are critical issues; 9 are medium.",
+    "The data is free of critical issues.",
+    "It does not have critical problems.",
+])
+def test_negated_severity_is_accepted(analysis, ok):
+    """Found on a real run: qwen2.5:7b and llama3.2:3b were rejected for correct sentences like these."""
+    assert check_summary(ok, build_facts(analysis)) == ok
+
+
+def test_unnegated_severity_still_rejected_even_after_an_earlier_no(analysis):
+    with pytest.raises(SummaryRejected, match="no issue is critical"):
+        check_summary("There is no doubt. The critical issues are in 'age'.", build_facts(analysis))
+
+
+def test_rejected_text_is_kept_and_shown(analysis, capsys):
+    r = summarize(analysis, "ollama", environ={}, transport=FakeTransport(ollama_text=REAL_OLLAMA_TEXT))
+    assert r["rejected_text"] == REAL_OLLAMA_TEXT
+    view = summary_view(r)
+    assert view["rejected_text"] == REAL_OLLAMA_TEXT
+    html = render_html({**analysis, "summary": r})
+    assert "Show the AI text that was rejected" in html and "seven problems" in html
+    from main import format_summary
+    assert "The AI text that was rejected:" in format_summary(r)
+    ok = summarize(analysis, "template", environ={})
+    assert ok["rejected_text"] is None and "Show the AI text" not in render_html({**analysis, "summary": ok})
+
+
+def test_timeout_message_says_timed_out_not_unreachable(monkeypatch):
+    import socket
+    def slow(*a, **k):
+        raise urllib.error.URLError(socket.timeout("timed out"))
+    import urllib.error
+    monkeypatch.setattr(urllib.request, "urlopen", slow)
+    with pytest.raises(ProviderError, match=r"no answer from http://localhost:11434 within 120 seconds.*DATATRUST_AI_TIMEOUT"):
+        http_json("http://localhost:11434/api/chat", {"x": 1}, {}, 120)
+    def slow2(*a, **k):
+        raise TimeoutError("timed out")
+    monkeypatch.setattr(urllib.request, "urlopen", slow2)
+    with pytest.raises(ProviderError, match="within 5 seconds"):
+        http_json("http://localhost:11434/api/chat", {"x": 1}, {}, 5)

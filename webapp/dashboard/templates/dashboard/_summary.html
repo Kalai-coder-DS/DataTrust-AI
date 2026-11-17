@@ -2,5 +2,7 @@
   <h2>Summary <span class="muted small">{{ summary.source }}</span></h2>
   {% for p in summary.paragraphs %}<p>{{ p }}</p>{% endfor %}
   {% if summary.fallback %}<p class="cap" role="status">⚠ {{ summary.fallback }}</p>{% endif %}
+  {% if summary.rejected_text %}<details class="cap"><summary>Show the AI text that was rejected</summary>
+    <pre style="white-space:pre-wrap">{{ summary.rejected_text }}</pre></details>{% endif %}
   <p class="cap">{{ summary.note }}</p>
 </section>

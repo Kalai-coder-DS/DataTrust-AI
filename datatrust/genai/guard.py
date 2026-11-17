@@ -15,7 +15,8 @@ Rejected, so the template summary is used instead:
     membership check alone passes them; these checks look at what the number describes:
       * "<N> issues/problems" must be a real issue count (written in digits or words)
       * "beats guessing by <X>" must be the real lift
-      * "critical"/"high" issues may only be mentioned when there are some
+      * "critical"/"high" issues may only be mentioned when there are some ("no critical issues" is fine:
+        found when qwen2.5:7b and llama3.2:3b were both rejected for that correct sentence)
 """
 from __future__ import annotations
 
@@ -33,6 +34,14 @@ WORDS = {w: i for i, w in enumerate(
 _COUNT = re.compile(r"\b(\d+|" + "|".join(WORDS) + r")\s+(?:[a-z-]+\s+){0,2}?(issues?|problems?)\b", re.I)
 _LIFT = re.compile(r"beat(?:s|ing)?\s+(?:random\s+)?guess(?:ing)?\s+by\D{0,40}?(-?\d+(?:\.\d+)?)", re.I)
 _SEVERE = re.compile(r"\b(critical|high[- ]severity|high-priority)\s+(?:data[- ]quality\s+)?(issues?|problems?)\b", re.I)
+
+
+_NEGATION = re.compile(r"\b(no|none|not|zero|without|neither|nor|free of|aren't|isn't|are not|is not|0)\b[^.!?]*$", re.I)
+
+
+def _negated(text: str, start: int) -> bool:
+    """'there are no critical issues' is correct when there are none: look back within the sentence."""
+    return bool(_NEGATION.search(text[max(0, start - 60):start]))
 
 
 def _count_value(token: str) -> float:
@@ -55,7 +64,7 @@ def _meaning_checks(text: str, facts: dict) -> None:
             raise SummaryRejected(f"the AI text says the model {m.group(0)!r}, but it beats guessing by {real}")
     for m in _SEVERE.finditer(text):
         level = "critical" if m.group(1).lower() == "critical" else "high"
-        if c[level] == 0:
+        if c[level] == 0 and not _negated(text, m.start()):
             raise SummaryRejected(f"the AI text mentions '{m.group(0)}', but no issue is {level}")
 
 

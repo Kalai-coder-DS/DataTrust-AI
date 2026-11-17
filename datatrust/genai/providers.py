@@ -50,7 +50,12 @@ def http_json(url: str, body: dict, headers: dict, timeout: float) -> dict:
                             + (f": {detail[:200]}" if detail else "")) from None
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         reason = getattr(exc, "reason", exc)
-        raise ProviderError(f"cannot reach {url.split('/v1')[0].split('/api')[0]} ({reason})") from None
+        host = url.split('/v1')[0].split('/api')[0]
+        if isinstance(reason, TimeoutError) or "timed out" in str(reason).lower():
+            # Found with qwen2.5:7b on a laptop CPU: the server WAS reached, it just answered too slowly.
+            raise ProviderError(f"no answer from {host} within {timeout:g} seconds; a slow model may need a "
+                                "higher DATATRUST_AI_TIMEOUT") from None
+        raise ProviderError(f"cannot reach {host} ({reason})") from None
     except json.JSONDecodeError:
         raise ProviderError("the answer was not valid JSON") from None
 

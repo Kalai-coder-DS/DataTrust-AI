@@ -3,6 +3,21 @@
 What changed in each phase, so you can see at a glance which files are new or modified.
 Each phase is also a Git tag (`git checkout phase-2` to see the project as it was).
 
+## Phase 9 fix 2 — no false alarms on "no critical issues"; show rejected text
+
+Found on real runs: qwen2.5:7b and llama3.2:3b were both rejected for mentioning "critical issues" when the
+sample has none. Two models making the same "mistake" pointed at the check: a correct sentence such as
+"there are no critical issues" was rejected because the check ignored the "no".
+
+- `datatrust/genai/guard.py` — "no / none / not / without / free of ... critical issues" in the same sentence is accepted
+- `datatrust/genai/summary.py` — keeps the rejected AI text (`rejected_text`) so the user can see what was written
+- `datatrust/genai/providers.py` — a timeout says "no answer within N seconds; raise DATATRUST_AI_TIMEOUT"
+  instead of "cannot reach" (the server was reached; qwen2.5:7b was slow on a laptop CPU)
+- `main.py`, `datatrust/reporting/html_report.py`, `_summary.html`, `present.py` — show the rejected text
+- `tests/test_genai.py` — 7 tests
+
+**Tests:** 351 → 358
+
 ## Phase 9 fix — guard checks what numbers mean
 
 First real run with Ollama (llama3.2:3b, Windows) wrote "seven problems" (12 exist), "beats guessing by a

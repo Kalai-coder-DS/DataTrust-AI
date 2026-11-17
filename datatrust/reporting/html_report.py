@@ -322,6 +322,9 @@ def _summary(a: dict) -> str:
         return ""
     paras = "".join(f"<p>{_e(p)}</p>" for p in v["paragraphs"])
     fallback = f'<p class="cap">⚠ {_e(v["fallback"])}</p>' if v["fallback"] else ""
+    if v["rejected_text"]:
+        fallback += (f'<details class="cap"><summary>Show the AI text that was rejected</summary>'
+                     f'<pre style="white-space:pre-wrap">{_e(v["rejected_text"])}</pre></details>')
     return f"""
 <section class="summary"><h2>Summary <span class="muted small">{_e(v['source'])}</span></h2>
   {paras}{fallback}

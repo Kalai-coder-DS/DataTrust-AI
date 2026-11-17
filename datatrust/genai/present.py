@@ -21,6 +21,7 @@ def summary_view(summary: dict | None) -> dict | None:
         "source": source,
         "is_ai": summary.get("provider") in ("ollama", "claude"),
         "fallback": fallback,
+        "rejected_text": summary.get("rejected_text"),
         "note": "The scores are calculated by the DataTrust engine; this summary only explains them. "
                 "AI-written text is checked so it cannot contain numbers that are not in the analysis.",
     }

@@ -104,19 +104,25 @@ def summarize(analysis: dict, provider: str | None = None, environ: dict | None 
     else:
         chosen = requested
 
-    reason = None
+    reason = rejected = None
     if chosen != "template":
         p = providers[chosen]
         try:
             if chosen == "claude" and not p.available():
                 raise ProviderError("ANTHROPIC_API_KEY is not set")
-            text = check_summary(p.summarize(facts), facts)
+            raw = p.summarize(facts)
+            try:
+                text = check_summary(raw, facts)
+            except SummaryRejected:
+                rejected = raw[:4000]          # kept so the user can see what the AI wrote and why it failed
+                raise
             logger.info("Summary written by %s (%s)", chosen, p.model)
             return {"text": text, "provider": chosen, "label": LABELS[chosen], "requested": requested,
-                    "model": p.model, "fallback_reason": None, "facts": facts}
+                    "model": p.model, "fallback_reason": None, "rejected_text": None, "facts": facts}
         except (ProviderError, SummaryRejected) as exc:
             reason = f"{LABELS[chosen]}: {exc}"
             logger.warning("Summary: %s; using the template summary instead", reason)
 
     return {"text": TemplateProvider().summarize(facts), "provider": "template", "label": LABELS["template"],
-            "requested": requested, "model": None, "fallback_reason": reason, "facts": facts}
+            "requested": requested, "model": None, "fallback_reason": reason, "rejected_text": rejected,
+            "facts": facts}

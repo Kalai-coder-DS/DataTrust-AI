@@ -243,6 +243,10 @@ def format_summary(summary: dict) -> str:
         lines += textwrap.wrap(p, 76, initial_indent=" ", subsequent_indent=" ") + [""]
     if v["fallback"]:
         lines += textwrap.wrap("! " + v["fallback"], 76, initial_indent=" ", subsequent_indent="   ")
+    if v["rejected_text"]:
+        lines += ["", " The AI text that was rejected:"]
+        for p in v["rejected_text"].split("\n"):
+            lines += textwrap.wrap(p, 74, initial_indent="   | ", subsequent_indent="   | ") or ["   |"]
     lines.append("=" * 78)
     return "\n".join(lines)
 
