@@ -75,7 +75,8 @@ def upload(request):
                 with repository() as repo:
                     run_id = analyze_upload(f.chunks(), f.name, repo,
                                             target=form.cleaned_data["target"], size=f.size,
-                                            baseline=form.cleaned_data["baseline"])
+                                            baseline=form.cleaned_data["baseline"],
+                                            summary=form.cleaned_data["summary"])
             except UploadRejected as exc:
                 form.add_error(None, str(exc))
             else:

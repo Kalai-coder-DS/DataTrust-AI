@@ -33,6 +33,12 @@
       <p class="help">{{ form.baseline.help_text }}</p>
     </div>
 
+    <div class="field">
+      <label for="{{ form.summary.id_for_label }}">{{ form.summary.label }}</label>
+      {{ form.summary }}
+      <p class="help">{{ form.summary.help_text }}</p>
+    </div>
+
     <button class="button primary" type="submit">Analyse</button>
     <p class="help">Large files take a few seconds; the page loads when the analysis is done.</p>
   </form>

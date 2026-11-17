@@ -21,6 +21,8 @@
 {% with card=ml %}{% include "dashboard/_score_card.html" %}{% endwith %}
 </div>
 
+{% if summary %}{% include "dashboard/_summary.html" %}{% endif %}
+
 <section>
   <h2>Top actions <span class="muted small">biggest score gain first</span></h2>
   {% if top_actions %}

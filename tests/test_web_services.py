@@ -146,6 +146,15 @@ def test_baseline_option(repo, sample_dir):
     assert run_page(repo, plain)["importance"] is None
 
 
+def test_summary_option(repo, sample_dir):
+    plain = upload(repo, sample_dir / "customers_clean.csv")
+    assert run_page(repo, plain)["summary"] is None
+    run_id = analyze_upload(chunks_of(sample_dir / "customers_dirty.csv"), "customers_dirty.csv", repo,
+                            target="churned", summary="template")
+    view = run_page(repo, run_id)["summary"]
+    assert view["source"] == "Template summary (offline)" and view["paragraphs"][0].startswith("'customers_dirty.csv'")
+
+
 def test_blank_target_means_no_target(repo, sample_dir):
     run_id = analyze_upload(chunks_of(sample_dir / "customers_clean.csv"), "customers_clean.csv", repo, target="   ")
     assert stored_analysis(repo, run_id)["meta"]["target"] is None

@@ -164,6 +164,34 @@ class BaselineModelTests(WebTestCase):
         self.assertNotContains(self.client.get(r["Location"]), "Baseline model")
 
 
+class SummaryTests(WebTestCase):
+    def test_form_offers_the_summary_choice(self):
+        r = self.client.get(reverse("dashboard:upload"))
+        self.assertContains(r, 'name="summary"')
+        self.assertContains(r, '<option value="auto" selected>')
+
+    def test_template_summary_on_run_page_and_report(self):
+        r = self.client.post(reverse("dashboard:upload"),
+                             {"file": csv_upload(SAMPLE_DIR / "customers_dirty.csv"), "target": "churned",
+                              "summary": "template"})
+        self.assertEqual(r.status_code, 302)
+        page = self.client.get(r["Location"])
+        self.assertTemplateUsed(page, "dashboard/_summary.html")
+        self.assertContains(page, "Template summary (offline)")
+        self.assertContains(self.client.get(reverse("dashboard:report", args=[1])), "Template summary (offline)")
+
+    def test_claude_without_key_falls_back_visibly(self):
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}):
+            r = self.client.post(reverse("dashboard:upload"),
+                                 {"file": csv_upload(SAMPLE_DIR / "customers_clean.csv"), "summary": "claude"})
+        self.assertContains(self.client.get(r["Location"]), "ANTHROPIC_API_KEY is not set")
+
+    def test_no_summary_choice(self):
+        r = self.client.post(reverse("dashboard:upload"),
+                             {"file": csv_upload(SAMPLE_DIR / "customers_clean.csv"), "summary": ""})
+        self.assertTemplateNotUsed(self.client.get(r["Location"]), "dashboard/_summary.html")
+
+
 class DatasetPageTests(WebTestCase):
     def test_history_chart_and_table(self):
         self.upload_dirty()

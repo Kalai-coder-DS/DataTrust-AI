@@ -3,6 +3,31 @@
 What changed in each phase, so you can see at a glance which files are new or modified.
 Each phase is also a Git tag (`git checkout phase-2` to see the project as it was).
 
+## Phase 9 — Plain-language summaries (template, Ollama, Claude API)
+
+Three providers behind one interface. The template is the default and always works offline; Ollama (local, free)
+and the Claude API are optional and need no new Python packages (HTTP via the standard library).
+
+**New files** (`datatrust/genai/`)
+- `facts.py` — the verified facts every provider receives, copied from the analysis; nothing recalculated
+- `guard.py` — rejects AI text that is empty, too long, or contains a number not in the facts
+- `providers.py` — `TemplateProvider`, `OllamaProvider`, `ClaudeProvider`; shared prompt; injectable HTTP transport
+- `summary.py` — `summarize()`: provider choice (`auto`/`template`/`ollama`/`claude`), configuration from the
+  environment, automatic fallback to the template with the reason recorded
+- `present.py` — display values shared by report, CLI and web page
+- `webapp/dashboard/templates/dashboard/_summary.html` — run page section
+- `tests/test_genai.py` — 27 tests; network blocked for the whole file
+
+**Modified files**
+- `datatrust/pipeline.py` — `analyze_file(..., summary=None)`; result under `"summary"` (nothing added by default)
+- `datatrust/reporting/html_report.py` — Summary section under the scores
+- `main.py` — `--summary [PROVIDER]`
+- `datatrust/web/services.py`, `webapp/dashboard/forms.py`, `views.py`, `upload.html`, `run.html`, `base.html`, `tests.py`
+- `tests/test_web_services.py`, `tests/test_webapp.py` — summary option; template check covers `_summary.html`
+- `.env.example`, `README.md`, `docs/ARCHITECTURE.md`
+
+**Tests:** 315 → 343 (with Django installed; Django page tests inside them: 28 → 32); every one runs offline
+
 ## Phase 8 — What the model relies on (feature importance + data problems)
 
 Decision: **permutation importance** (scikit-learn, already required) instead of SHAP. It gives one number per

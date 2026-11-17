@@ -1,0 +1,6 @@
+<section class="summary">
+  <h2>Summary <span class="muted small">{{ summary.source }}</span></h2>
+  {% for p in summary.paragraphs %}<p>{{ p }}</p>{% endfor %}
+  {% if summary.fallback %}<p class="cap" role="status">⚠ {{ summary.fallback }}</p>{% endif %}
+  <p class="cap">{{ summary.note }}</p>
+</section>

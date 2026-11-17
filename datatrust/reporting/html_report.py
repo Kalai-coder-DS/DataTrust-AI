@@ -314,6 +314,21 @@ def _importance(a: dict) -> str:
 </section>"""
 
 
+def _summary(a: dict) -> str:
+    """Phase 9: plain-language summary (only when the analysis includes one)."""
+    from datatrust.genai.present import summary_view
+    v = summary_view(a.get("summary"))
+    if v is None:
+        return ""
+    paras = "".join(f"<p>{_e(p)}</p>" for p in v["paragraphs"])
+    fallback = f'<p class="cap">⚠ {_e(v["fallback"])}</p>' if v["fallback"] else ""
+    return f"""
+<section class="summary"><h2>Summary <span class="muted small">{_e(v['source'])}</span></h2>
+  {paras}{fallback}
+  <p class="cap">{_e(v['note'])}</p>
+</section>"""
+
+
 def _notes(a: dict) -> str:
     notes = a["scores"]["trust"]["notes"] + a["scores"]["ml_readiness"]["notes"]
     warnings = a["file"]["warnings"]
@@ -379,6 +394,7 @@ def render_html(analysis: dict) -> str:
     body = (
         _header(analysis)
         + f'<div class="tiles">{_score_tile(s["trust"])}{_score_tile(s["ml_readiness"])}</div>'
+        + _summary(analysis)
         + _top_actions(analysis)
         + _issues(analysis)
         + _missing_chart(analysis)

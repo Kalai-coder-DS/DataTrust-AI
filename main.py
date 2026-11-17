@@ -22,10 +22,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import textwrap
 from pathlib import Path
 
 from datatrust.exceptions import DataTrustError
 from datatrust.logger import get_logger
+from datatrust.genai import PROVIDERS
+from datatrust.genai.present import summary_view
 from datatrust.ml.present import baseline_view, importance_view
 from datatrust.pipeline import analyze_file
 from datatrust.reporting import render_html
@@ -233,6 +236,17 @@ def format_importance(ml: dict) -> str:
     return "\n".join(lines)
 
 
+def format_summary(summary: dict) -> str:
+    v = summary_view(summary)
+    lines = [f" PLAIN-LANGUAGE SUMMARY: {v['source']}", "=" * 78]
+    for p in v["paragraphs"]:
+        lines += textwrap.wrap(p, 76, initial_indent=" ", subsequent_indent=" ") + [""]
+    if v["fallback"]:
+        lines += textwrap.wrap("! " + v["fallback"], 76, initial_indent=" ", subsequent_indent="   ")
+    lines.append("=" * 78)
+    return "\n".join(lines)
+
+
 def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="DataTrust AI - analyse the quality and ML readiness of a CSV file")
     parser.add_argument("csv_path", help="Path to the CSV file")
@@ -243,13 +257,15 @@ def run(argv: list[str] | None = None) -> int:
                         help="Store this analysis in the database configured in .env (MySQL or SQLite)")
     parser.add_argument("--baseline", action="store_true",
                         help="Train a baseline model on --target, on the raw and on the cleaned data (Phase 7)")
+    parser.add_argument("--summary", nargs="?", const="auto", choices=PROVIDERS, metavar="PROVIDER",
+                        help="Add a plain-language summary (Phase 9): auto (default), template, ollama or claude")
     args = parser.parse_args(argv)
     if args.baseline and not args.target:
         print("ERROR: --baseline needs --target COLUMN (the column the model should predict).", file=sys.stderr)
         return 2
 
     try:
-        analysis = analyze_file(args.csv_path, target=args.target, baseline=args.baseline)
+        analysis = analyze_file(args.csv_path, target=args.target, baseline=args.baseline, summary=args.summary)
     except (DataTrustError, ValueError) as exc:
         logger.error("%s", exc)
         print(f"ERROR: {exc}", file=sys.stderr)
@@ -263,6 +279,8 @@ def run(argv: list[str] | None = None) -> int:
         print(format_baseline(analysis["ml"]))
         if importance_view(analysis["ml"]):
             print(format_importance(analysis["ml"]))
+    if "summary" in analysis:
+        print(format_summary(analysis["summary"]))
 
     if args.json_out:
         out = _prepare(args.json_out)
