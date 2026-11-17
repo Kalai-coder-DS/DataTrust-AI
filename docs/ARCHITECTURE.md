@@ -434,3 +434,32 @@ The scores say whether data is *healthy*; Phase 7 checks what that means for an 
 - Outliers are not changed by cleaning (extreme ≠ wrong); their effect on the model is not measured separately.
 - Score history (dataset page, `sql/`) does not show the model score yet: it lives in the stored JSON only.
 - Time-based leakage and train/test drift need dates and domain knowledge; not attempted.
+
+## 12. Phase 8 — What the model relies on
+
+`ml/importance.py`, run as part of the Phase 7 baseline (same model, same cleaned data):
+
+1. For each of 5 folds: train on 4, then shuffle one column at a time in the 5th and record how much the
+   score drops (5 shuffles per column). Average over folds; the spread is the noise.
+2. Join every column with the Phase 2 issues on its values (missing, placeholders, impossible values,
+   spelling variants, outliers, bad dates, text in numbers).
+3. Verdict: which columns the model relies on; **fix first** = relied on AND has a problem;
+   **can wait** = has a problem but no measurable effect on this model.
+
+### Key design decisions (interview talking points)
+
+1. **Permutation importance, not SHAP.** Per original column (not per one-hot piece), in the model's metric,
+   on held-out rows, no new dependency. SHAP's strength, explaining single predictions, is not needed here.
+2. **Verified against ground truth.** The sample generator makes churn depend on tenure only; the tool finds
+   exactly that, for every seed tested.
+3. **Strict "relied on" rule.** 3 standard errors *and* ≥ 5% of the top column. A 2-SE rule called randomly
+   generated columns important, because chance correlation in a small sample is shared by every fold.
+4. **Turns the report into a priority list.** Data problems matter most where the model looks.
+
+### Known limitations
+
+- Correlated columns share importance (shuffle one, the model uses the other). Cleaning drops redundant
+  columns first, which removes most of this; the report states it.
+- "Can wait" is about *this* model only: a simpler model, or a dashboard reading the raw values, can still be
+  hurt by those problems.
+- Importance is computed on the cleaned data, so it describes the model you get after following the report.

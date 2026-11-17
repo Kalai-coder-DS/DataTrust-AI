@@ -136,6 +136,7 @@ class Settings:
     ml_min_rows: int = 30           # fewer usable rows than this: no model is trained
     ml_random_state: int = 0        # same data -> same scores, every run
     ml_max_categories: int = 20     # one-hot columns per categorical feature (rarer labels grouped)
+    ml_importance_repeats: int = 5  # Phase 8: shuffles per column per test fold
 
     # ---------- Logging ----------
     log_dir: Path = PROJECT_ROOT / "logs"

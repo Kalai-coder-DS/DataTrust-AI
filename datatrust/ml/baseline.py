@@ -215,6 +215,21 @@ def _suspect_verdict(result: dict, label: str) -> list[str]:
             f"({f3(result['cleaned']['score'])} vs {f3(w['score'])}): the model does not depend on it."]
 
 
+def _importance(data, analysis: dict, target: str, task: str, suspects: tuple, settings: Settings) -> dict | None:
+    """Phase 8: which columns the cleaned-data model relies on, joined with their data problems."""
+    from datatrust.ml.importance import compute_importance, explain
+    prep = prepare(data, analysis, target, clean=True, settings=settings)
+    if len(prep.numeric) + len(prep.categorical) == 0 or len(prep.X) < settings.ml_min_rows:
+        return None
+    m = METRICS[task]
+    try:
+        imp = compute_importance(prep, task, m["primary"]["key"], lambda: _pipeline(prep, task, settings), settings)
+    except ValueError as exc:            # e.g. a class too small to split: the baseline already says so
+        logger.warning("Feature importance skipped: %s", exc)
+        return None
+    return explain(imp, analysis, m["primary"]["label"], list(suspects))
+
+
 def run_baseline(df: pd.DataFrame, analysis: dict, target: str | None,
                  settings: Settings = DEFAULT_SETTINGS) -> dict:
     """Train and score the baseline model on raw and cleaned data. Never raises for data problems."""
@@ -254,6 +269,7 @@ def run_baseline(df: pd.DataFrame, analysis: dict, target: str | None,
         result["reason"] = cleaned.get("reason") or raw.get("reason")
         return result
     result["verdict"] = _verdict(result)
+    result["importance"] = _importance(data, analysis, target, task, suspects, settings)
     logger.info("Baseline model for '%s': raw %s, cleaned %s (%s)", target,
                 raw.get("score"), cleaned.get("score"), m["primary"]["label"])
     return result

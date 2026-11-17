@@ -147,11 +147,15 @@ class BaselineModelTests(WebTestCase):
         self.assertEqual(r.status_code, 302)
         page = self.client.get(r["Location"])
         self.assertTemplateUsed(page, "dashboard/_baseline.html")
+        self.assertTemplateUsed(page, "dashboard/_importance.html")
+        self.assertContains(page, "What the model relies on")
+        self.assertContains(page, "tenure_months")
         for text in ["Baseline model", "Guessing", "Raw data", "After cleaning", "Balanced accuracy",
                      "Removed 15 duplicate row(s)", "within the run-to-run noise"]:
             self.assertContains(page, text)
         report = self.client.get(reverse("dashboard:report", args=[1]))
         self.assertContains(report, "Baseline model")
+        self.assertContains(report, "What the model relies on")
         data = json.loads(self.client.get(reverse("dashboard:json", args=[1])).content)
         self.assertEqual(data["ml"]["status"], "ok")
 

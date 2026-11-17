@@ -26,7 +26,7 @@ from pathlib import Path
 
 from datatrust.exceptions import DataTrustError
 from datatrust.logger import get_logger
-from datatrust.ml.present import baseline_view
+from datatrust.ml.present import baseline_view, importance_view
 from datatrust.pipeline import analyze_file
 from datatrust.reporting import render_html
 from datatrust.scoring import GRADE_MEANING
@@ -213,6 +213,26 @@ def format_baseline(ml: dict) -> str:
     return "\n".join(lines)
 
 
+def format_importance(ml: dict) -> str:
+    v = importance_view(ml)
+    if v is None:
+        return ""
+    lines = [" WHAT THE MODEL RELIES ON (and which data problems matter for it)", "=" * 78,
+             f" {'#':>2} {'Column':<18}{'':22}{'Import.':>8}  Data problems"]
+    for r in v["rows"]:
+        mark = "!" if r["fix_first"] else " "
+        lines.append(f"{mark}{r['rank']:>2} {r['column'][:17]:<18}{_bar(r['width'])[:20]:<22}{r['text']:>8}  "
+                     f"{r['problems_text'][:40]}")
+    if v["hidden"]:
+        lines.append(f"    ... {v['hidden']} less important column(s) not shown")
+    lines.append("-" * 78)
+    lines += [f" * {t}" for t in v["verdict"]]
+    lines.append(" ! = relied on AND has a data problem (fix first)")
+    lines.append(f" {v['method']}.")
+    lines.append("=" * 78)
+    return "\n".join(lines)
+
+
 def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="DataTrust AI - analyse the quality and ML readiness of a CSV file")
     parser.add_argument("csv_path", help="Path to the CSV file")
@@ -241,6 +261,8 @@ def run(argv: list[str] | None = None) -> int:
     print(format_scores(analysis["scores"]))
     if "ml" in analysis:
         print(format_baseline(analysis["ml"]))
+        if importance_view(analysis["ml"]):
+            print(format_importance(analysis["ml"]))
 
     if args.json_out:
         out = _prepare(args.json_out)
