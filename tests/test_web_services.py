@@ -141,6 +141,9 @@ def test_baseline_option(repo, sample_dir):
     assert view["status"] == "ok" and view["columns"] == ["Raw data", "After cleaning"]
     assert [b["label"] for b in view["bars"]] == ["Guessing", "Raw data", "After cleaning"]
     assert all(len(r["cells"]) == 2 for r in view["table"])
+    importance = run_page(repo, run_id)["importance"]
+    assert importance["rows"][0]["column"] == "tenure_months"
+    assert run_page(repo, plain)["importance"] is None
 
 
 def test_blank_target_means_no_target(repo, sample_dir):

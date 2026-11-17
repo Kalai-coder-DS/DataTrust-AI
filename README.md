@@ -4,7 +4,7 @@
 
 Upload a CSV and find out whether it can be trusted — and whether it's ready for Machine Learning.
 
-> Status: **Phase 7 — Baseline model** (Phases 1–6 ✅ verified).
+> Status: **Phase 8 — What the model relies on** (Phases 1–7 ✅ verified).
 > What changed in each phase: [CHANGELOG.md](CHANGELOG.md)
 > See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the architecture and the full phase plan.
 
@@ -56,17 +56,15 @@ The web app uses the same database as `--save` (your MySQL via `.env`), through
    (`.env` is in `.gitignore`: it never goes to GitHub)
 3. `python scripts/db.py init` → creates database `datatrust` and its 3 tables
 
-## Phase 7 verification checklist
+## Phase 8 verification checklist
 
-- [ ] `pip install -r requirements.txt` → scikit-learn installs
-- [ ] `python -m pytest` → **all passed, 0 skipped** (takes about 2 minutes: models are trained)
-- [ ] `python main.py data/sample/customers_dirty.csv --target churned --baseline` → BASELINE MODEL section;
-      the change after cleaning is reported as *within the run-to-run noise*
-- [ ] `python main.py ../../CarPrice_Assignment.csv --target price --baseline` → strong R²; if a column is flagged as
-      possible leakage, a third column "Without ..." shows how much the model depends on it
-- [ ] Web app: upload `insurance.csv`, target `charges`, box ticked → run page has a **Baseline model** section,
-      and **Open full report** shows the same section
-- [ ] Upload with the box ticked but no target → analysis works, no model section (a model needs a target)
+- [ ] `python -m pytest` → **all passed, 0 skipped** (about 3 minutes: models are trained)
+- [ ] `python main.py data/sample/customers_dirty.csv --target churned --baseline` → after BASELINE MODEL, a
+      **WHAT THE MODEL RELIES ON** section: only `tenure_months` is relied on (the sample's churn was generated
+      from tenure alone), and the columns with problems are listed under "Can wait"
+- [ ] `python main.py ..\CarPrice_Assignment.csv --target price --baseline` → the columns price depends on;
+      any marked `!` are relied on AND have a data problem: fix those first
+- [ ] Web app: upload with a target and the box ticked → run page and full report show **What the model relies on**
 
 On Windows, if `python` points to another installation, use `.venv\Scripts\python.exe` instead of `python`.
 

@@ -24,7 +24,7 @@ from typing import Iterable, Iterator
 from datatrust.config import DEFAULT_SETTINGS, Settings
 from datatrust.exceptions import DataTrustError
 from datatrust.logger import get_logger
-from datatrust.ml.present import baseline_view
+from datatrust.ml.present import baseline_view, importance_view
 from datatrust.pipeline import analyze_file
 from datatrust.reporting.html_report import GRADE_CLASS, GRADE_MEANING, SEVERITY_DISPLAY
 from datatrust.storage import AnalysisRepository, Database, DBConfig, RunNotFound, load_env_file, open_repository
@@ -255,4 +255,5 @@ def run_page(repo: AnalysisRepository, run_id: int) -> dict:
         ],
         "total_issues": q["total_issues"],
         "baseline": baseline_view(a.get("ml")),
+        "importance": importance_view(a.get("ml")),
     }

@@ -97,3 +97,39 @@ def baseline_view(ml: dict | None) -> dict | None:
         "notes": sorted(set(raw.get("notes", []) + cleaned.get("notes", []))),
         "footnote": footnote,
     }
+
+
+SEVERITY_ICON = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "⚪"}
+
+
+def importance_view(ml: dict | None, top: int = 12) -> dict | None:
+    """Phase 8 display values: bars scaled to the most important column, problems per column."""
+    imp = (ml or {}).get("importance")
+    if not imp:
+        return None
+    cols = imp["columns"]
+    biggest = max([c["importance"] for c in cols] + [1e-9])
+    rows = []
+    for c in cols[:top]:
+        p = c["problems"]
+        rows.append({
+            "rank": c["rank"],
+            "column": c["column"],
+            "text": f3(c["importance"]),
+            "width": round(max(0.0, c["importance"]) / biggest * 100, 1),
+            "relied_on": c["relied_on"],
+            "status": "relied on" if c["relied_on"] else "no measurable effect",
+            "suspect": c["suspect"],
+            "problems": [f"{SEVERITY_ICON.get(x['severity'], '')} {x['message']}" for x in p],
+            "problems_text": "; ".join(x["message"].rstrip(".") for x in p) or "none",
+            "fix_first": c["relied_on"] and bool(p),
+        })
+    return {
+        "metric_label": imp["metric_label"],
+        "rows": rows,
+        "hidden": max(0, len(cols) - top),
+        "verdict": imp["verdict"],
+        "note": imp["note"],
+        "method": f"Permutation importance, {imp['folds']}-fold cross-validation, "
+                  f"{imp['repeats']} shuffles per column per fold, on the cleaned data",
+    }

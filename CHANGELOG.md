@@ -3,6 +3,33 @@
 What changed in each phase, so you can see at a glance which files are new or modified.
 Each phase is also a Git tag (`git checkout phase-2` to see the project as it was).
 
+## Phase 8 — What the model relies on (feature importance + data problems)
+
+Decision: **permutation importance** (scikit-learn, already required) instead of SHAP. It gives one number per
+original column, the level at which the report lists problems, in the model's own metric, on held-out rows.
+SHAP explains single predictions, which this tool does not need, and could not be installed or tested here.
+
+**New files**
+- `datatrust/ml/importance.py` — cross-validated permutation importance; joins each column with its Phase 2
+  value problems; verdict: what the model relies on, which fixes come first, which can wait
+- `webapp/dashboard/templates/dashboard/_importance.html` — run page section
+- `tests/test_importance.py` — 12 tests with known causes
+
+**Modified files**
+- `datatrust/ml/baseline.py` — runs importance on the cleaned data; result under `ml.importance`
+- `datatrust/ml/present.py` — `importance_view` shared by report, CLI and web page
+- `datatrust/reporting/html_report.py`, `main.py`, `datatrust/web/services.py`, `webapp/dashboard/` — new section
+- `datatrust/config.py` — `ml_importance_repeats`
+
+**Found while testing (kept as tests)**
+1. Checked against the generator: the sample's churn depends only on `tenure_months`, and that is the only
+   column found to be relied on, for every seed tried.
+2. With a "2 standard errors" rule, `plan` (drawn at random) and a pure-noise column were called "relied on":
+   on a few hundred rows a random column correlates a little with the target by chance, in every fold alike.
+   Now a column must be 3 standard errors above zero AND at least 5% of the top column.
+
+**Tests:** 303 → 315 (with Django installed)
+
 ## Phase 7 — Baseline model (does cleaning change what a model learns?)
 
 **New files**

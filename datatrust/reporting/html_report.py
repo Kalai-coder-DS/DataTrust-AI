@@ -287,6 +287,33 @@ def _baseline(a: dict) -> str:
 </section>"""
 
 
+def _importance(a: dict) -> str:
+    """Phase 8: which columns the model relies on, joined with their data problems."""
+    from datatrust.ml.present import importance_view
+    v = importance_view(a.get("ml"))
+    if v is None:
+        return ""
+    bars = "".join(
+        f"""<div class="dim imp{' fix' if r['fix_first'] else ''}{'' if r['relied_on'] else ' weak'}" title="{_e(r['column'])}: {_e(r['text'])} ({_e(r['status'])})">
+              <span class="dim-name"><code>{_e(r['column'])}</code>{' ⚠' if r['suspect'] else ''}</span>
+              <span class="track"><span class="fill" style="width:{r['width']}%"></span></span>
+              <span class="dim-val">{_e(r['text'])}</span>
+              <span class="imp-p">{_e(r['problems_text'])}</span></div>"""
+        for r in v["rows"])
+    more = f'<p class="cap">{v["hidden"]} less important column(s) not shown (all in the JSON download).</p>' if v["hidden"] else ""
+    verdict = "".join(f"<p>{_e(t)}</p>" for t in v["verdict"])
+    return f"""
+<section><h2>What the model relies on <span class="muted small">and which data problems matter for it</span></h2>
+  <p class="muted">Columns ranked by importance; the right column lists the data problems the report found on each.
+     Highlighted = the model relies on it AND it has a problem: fix those first. ⚠ = flagged as possible target leakage.</p>
+  <div class="imp-head"><span>Column</span><span></span><span>Importance</span><span>Data problems</span></div>
+  <div class="dims">{bars}</div>{more}
+  <div class="verdict">{verdict}</div>
+  <p class="cap">{_e(v['note'])}</p>
+  <p class="cap">{_e(v['method'])}.</p>
+</section>"""
+
+
 def _notes(a: dict) -> str:
     notes = a["scores"]["trust"]["notes"] + a["scores"]["ml_readiness"]["notes"]
     warnings = a["file"]["warnings"]
@@ -336,6 +363,9 @@ td{border-bottom:1px solid var(--border);padding:8px;vertical-align:top}.num{tex
 .muted{color:var(--text-secondary)}.small{font-size:13px;font-weight:400}
 code{font-size:13px}
 h3{font-size:15px;margin:16px 0 6px}.mlbar{grid-template-columns:120px 1fr 64px}.verdict p{margin:10px 0}
+.imp,.imp-head{grid-template-columns:150px 1fr 64px minmax(0,1.3fr)}.imp-head span:nth-child(3){text-align:right}.imp.weak .fill{opacity:.35}.imp-head{display:grid;gap:10px;font-size:12px;color:var(--text-secondary)}
+.imp-p{font-size:13px;color:var(--text-secondary)}.imp.fix{background:color-mix(in srgb,var(--warning) 18%,transparent);border-radius:6px}
+.imp .dim-name{overflow-wrap:anywhere}
 .box .whisker{stroke:var(--text-secondary);stroke-width:1.5}.box .iqr{fill:var(--series-1);opacity:.35;stroke:var(--series-1)}
 .box .median{stroke:var(--text-primary);stroke-width:2}
 footer{color:var(--text-secondary);font-size:13px;margin-top:24px}
@@ -357,6 +387,7 @@ def render_html(analysis: dict) -> str:
         + _categorical(analysis)
         + _relationships(analysis)
         + _baseline(analysis)
+        + _importance(analysis)
         + _profile(analysis)
         + _notes(analysis)
     )

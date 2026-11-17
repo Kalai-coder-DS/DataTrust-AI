@@ -1,0 +1,20 @@
+<section>
+  <h2>What the model relies on <span class="muted small">and which data problems matter for it</span></h2>
+  <p class="muted">Columns ranked by importance; the right column lists the data problems the report found on each.
+     Highlighted = the model relies on it AND it has a problem: fix those first. ⚠ = flagged as possible target leakage.</p>
+  <div class="imp-head" aria-hidden="true"><span>Column</span><span></span><span>Importance</span><span>Data problems</span></div>
+  <div role="list">
+  {% for r in importance.rows %}
+    <div class="dim imp{% if r.fix_first %} fix{% endif %}{% if not r.relied_on %} weak{% endif %}" role="listitem" title="{{ r.column }}: {{ r.text }} ({{ r.status }})">
+      <span class="dim-name"><code>{{ r.column }}</code>{% if r.suspect %} ⚠{% endif %}</span>
+      <span class="track"><span class="fill" style="width:{{ r.width }}%"></span></span>
+      <span class="dim-val">{{ r.text }}</span>
+      <span class="imp-p">{{ r.problems_text }}</span>
+    </div>
+  {% endfor %}
+  </div>
+  {% if importance.hidden %}<p class="cap">{{ importance.hidden }} less important column(s) not shown (all in the JSON download).</p>{% endif %}
+  <div class="verdict">{% for t in importance.verdict %}<p>{{ t }}</p>{% endfor %}</div>
+  <p class="cap">{{ importance.note }}</p>
+  <p class="cap">{{ importance.method }}.</p>
+</section>
