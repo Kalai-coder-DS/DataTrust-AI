@@ -39,6 +39,7 @@ class WebTestCase(SimpleTestCase):
             "DATATRUST_DB": "sqlite",
             "DATATRUST_SQLITE_PATH": str(Path(self.tmp) / "web.db"),
             "DATATRUST_WEB_BACKGROUND": "0",       # analyse inside the request (Phase 10 tests switch it on)
+            "DATATRUST_WEB_PASSWORD": "",          # login off, even if your .env sets a password
         })
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -191,6 +192,75 @@ class SummaryTests(WebTestCase):
         r = self.client.post(reverse("dashboard:upload"),
                              {"file": csv_upload(SAMPLE_DIR / "customers_clean.csv"), "summary": ""})
         self.assertTemplateNotUsed(self.client.get(r["Location"]), "dashboard/_summary.html")
+
+
+class LoginTests(WebTestCase):
+    """Phase 10: single-user login."""
+
+    def setUp(self):
+        super().setUp()
+        from datatrust.web.auth import LoginThrottle
+        for patcher in (mock.patch.dict(os.environ, {"DATATRUST_WEB_PASSWORD": "s3cret"}),
+                        mock.patch("dashboard.views.throttle", LoginThrottle())):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def login(self, password="s3cret", next_url="/"):
+        return self.client.post(reverse("dashboard:login"), {"password": password, "next": next_url})
+
+    def test_pages_redirect_to_login(self):
+        r = self.client.get(reverse("dashboard:run", args=[1]))
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r["Location"], "/login/?next=%2Fruns%2F1%2F")
+        self.assertEqual(self.client.get(reverse("dashboard:upload")).status_code, 302)
+        self.assertEqual(self.client.get(reverse("dashboard:login")).status_code, 200)
+
+    def test_wrong_then_right_password(self):
+        r = self.login("nope")
+        self.assertEqual(r.status_code, 401)
+        self.assertContains(r, "Wrong password.", status_code=401)
+        r = self.login(next_url="/upload/")
+        self.assertRedirects(r, "/upload/")
+        cookie = r.cookies["datatrust_auth"]
+        self.assertTrue(cookie["httponly"])
+        self.assertEqual(cookie["samesite"], "Lax")
+        home = self.client.get(reverse("dashboard:home"))
+        self.assertEqual(home.status_code, 200)
+        self.assertContains(home, "Log out")
+
+    def test_changing_the_password_logs_out(self):
+        self.login()
+        with mock.patch.dict(os.environ, {"DATATRUST_WEB_PASSWORD": "new-password"}):
+            self.assertEqual(self.client.get(reverse("dashboard:home")).status_code, 302)
+
+    def test_forged_cookie_is_rejected(self):
+        self.client.cookies["datatrust_auth"] = "9999999999." + "0" * 64
+        self.assertEqual(self.client.get(reverse("dashboard:home")).status_code, 302)
+
+    def test_no_open_redirect(self):
+        self.assertRedirects(self.login(next_url="https://evil.example/"), "/", fetch_redirect_response=False)
+
+    def test_lockout_after_five_wrong_passwords(self):
+        for _ in range(5):
+            self.login("nope")
+        r = self.login()                                   # even the right password waits
+        self.assertEqual(r.status_code, 429)
+        self.assertContains(r, "Too many wrong passwords", status_code=429)
+
+    def test_logout(self):
+        self.login()
+        self.assertEqual(self.client.get(reverse("dashboard:logout")).status_code, 405)   # POST only (CSRF-safe)
+        r = self.client.post(reverse("dashboard:logout"))
+        self.assertRedirects(r, reverse("dashboard:login"))
+        self.assertEqual(self.client.get(reverse("dashboard:home")).status_code, 302)
+
+    def test_login_needs_csrf(self):
+        client = Client(enforce_csrf_checks=True)
+        self.assertEqual(client.post(reverse("dashboard:login"), {"password": "s3cret"}).status_code, 403)
+
+    def test_login_page_without_password_set_goes_home(self):
+        with mock.patch.dict(os.environ, {"DATATRUST_WEB_PASSWORD": ""}):
+            self.assertRedirects(self.client.get(reverse("dashboard:login")), "/")
 
 
 class BackgroundJobTests(WebTestCase):

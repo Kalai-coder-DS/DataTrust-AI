@@ -13,6 +13,7 @@ import json
 import os
 import re
 
+from django.conf import settings
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_http_methods
@@ -21,6 +22,7 @@ from datatrust.config import DEFAULT_SETTINGS
 from datatrust.logger import get_logger
 from datatrust.reporting import render_html
 from datatrust.storage import StorageError
+from datatrust.web.auth import COOKIE_NAME, MAX_AGE, LoginThrottle, check_password, make_token, safe_next
 from datatrust.web.jobs import JobManager
 from datatrust.web.services import start_upload_job
 from datatrust.web import (
@@ -40,6 +42,9 @@ logger = get_logger(__name__)
 # Phase 10: one job manager per server process (see datatrust/web/jobs.py for its limits).
 jobs = JobManager(workers=int(os.environ.get("DATATRUST_WEB_WORKERS", "2") or 2))
 JOB_ID = re.compile(r"^[0-9a-f]{32}$")
+
+
+throttle = LoginThrottle()
 
 
 def background_enabled() -> bool:
@@ -98,6 +103,46 @@ def upload(request):
                 return redirect("dashboard:run", run_id=run_id)
         return render(request, "dashboard/upload.html", {"form": form, "limit_mb": limit_mb}, status=400)
     return render(request, "dashboard/upload.html", {"form": UploadForm(), "limit_mb": limit_mb})
+
+
+@require_http_methods(["GET", "POST"])
+@handles_errors
+def login(request):
+    """Phase 10: single-user login (password from DATATRUST_WEB_PASSWORD). See datatrust/web/auth.py."""
+    from dashboard.middleware import web_password
+    password = web_password()
+    next_url = safe_next(request.POST.get("next") or request.GET.get("next"))
+    if not password:
+        return redirect(next_url)                         # login is switched off
+    context = {"next": next_url, "error": None}
+    status = 200
+    if request.method == "POST":
+        client = request.META.get("REMOTE_ADDR", "unknown")
+        wait = throttle.locked_for(client)
+        if wait:
+            context["error"] = f"Too many wrong passwords. Try again in {wait} seconds."
+            status = 429
+        elif check_password(request.POST.get("password"), password):
+            throttle.succeeded(client)
+            response = redirect(next_url)
+            response.set_cookie(COOKIE_NAME, make_token(settings.SECRET_KEY, password), max_age=MAX_AGE,
+                                httponly=True, samesite="Lax", secure=not settings.DEBUG)
+            logger.info("Web login from %s", client)
+            return response
+        else:
+            throttle.failed(client)
+            logger.warning("Wrong web password from %s", client)
+            context["error"] = "Wrong password."
+            status = 401
+    return render(request, "dashboard/login.html", context, status=status)
+
+
+@require_http_methods(["POST"])
+@handles_errors
+def logout(request):
+    response = redirect("dashboard:login")
+    response.delete_cookie(COOKIE_NAME, samesite="Lax")
+    return response
 
 
 @require_GET

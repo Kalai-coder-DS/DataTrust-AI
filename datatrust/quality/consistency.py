@@ -52,9 +52,14 @@ class ConsistencyCheck(QualityCheck):
         return issues
 
     def _inconsistent_format(self, name: str, values: pd.Series, n: int) -> QualityIssue | None:
-        normalised = values.str.strip().str.lower().str.replace(r"\s+", " ", regex=True)
-        frame = pd.DataFrame({"raw": values, "norm": normalised})
-        variant_counts = frame.groupby(["norm", "raw"]).size()
+        # Phase 10 speed-up: count each raw spelling once, then normalise only the distinct spellings
+        # (was: normalise every row, then group). Same (norm, raw) -> count table, same order.
+        raw_counts_all = values.value_counts(sort=False)
+        normalised = pd.Index(raw_counts_all.index).str.strip().str.lower().str.replace(r"\s+", " ", regex=True)
+        variant_counts = pd.Series(
+            raw_counts_all.to_numpy(),
+            index=pd.MultiIndex.from_arrays([normalised, raw_counts_all.index], names=["norm", "raw"]),
+        ).sort_index()
 
         groups: dict[str, dict[str, int]] = {}
         affected = 0
@@ -85,7 +90,7 @@ class ConsistencyCheck(QualityCheck):
         )
 
     def _numbers_as_words(self, name: str, values: pd.Series, n: int) -> QualityIssue | None:
-        distinct = set(values.str.strip().str.lower().unique())
+        distinct = set(pd.Index(values.unique()).str.strip().str.lower())
         if not distinct or not distinct.issubset(_NUMBER_WORDS):
             return None
         return QualityIssue(

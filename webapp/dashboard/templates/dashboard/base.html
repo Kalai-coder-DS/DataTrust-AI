@@ -75,6 +75,9 @@ h3{font-size:15px;margin:16px 0 6px}.mlbar{grid-template-columns:120px 1fr 64px}
 .imp,.imp-head{grid-template-columns:150px 1fr 64px minmax(0,1.3fr)}.imp-head span:nth-child(3){text-align:right}.imp.weak .fill{opacity:.35}.imp-head{display:grid;gap:10px;font-size:12px;color:var(--text-secondary)}
 .imp-p{font-size:13px;color:var(--text-secondary)}.imp.fix{background:color-mix(in srgb,var(--warning) 18%,transparent);border-radius:6px}
 .imp .dim-name{overflow-wrap:anywhere}
+form.logout{margin:0}.linkbutton{background:none;border:0;padding:0;font:inherit;color:var(--link);text-decoration:underline;cursor:pointer}
+form input[type=password]{width:100%;max-width:320px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;
+ background:var(--surface-0);color:var(--text-primary);font:inherit}
 form select{padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-0);color:var(--text-primary);font:inherit;max-width:100%}
 form label.check{display:flex;gap:8px;align-items:center;font-weight:600}
 footer{color:var(--text-secondary);font-size:13px;margin-top:24px}
@@ -86,6 +89,9 @@ footer{color:var(--text-secondary);font-size:13px;margin-top:24px}
     <a class="brand" href="{% url 'dashboard:home' %}">DataTrust AI</a>
     <a href="{% url 'dashboard:home' %}"{% if request.resolver_match.url_name == 'home' %} aria-current="page"{% endif %}>Dashboard</a>
     <a href="{% url 'dashboard:upload' %}"{% if request.resolver_match.url_name == 'upload' %} aria-current="page"{% endif %}>Analyse a CSV</a>
+    {% if request.datatrust_login_enabled and request.resolver_match.url_name != 'login' %}
+    <form method="post" action="{% url 'dashboard:logout' %}" class="logout">{% csrf_token %}<button class="linkbutton" type="submit">Log out</button></form>
+    {% endif %}
   </nav>
 </div>
 <main>

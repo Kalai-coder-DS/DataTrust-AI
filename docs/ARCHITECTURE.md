@@ -517,3 +517,16 @@ job ids; errors classified, internals kept in the log; `DATATRUST_WEB_BACKGROUND
 
 Limits: jobs live in the server process's memory. A restart forgets running jobs, and several server
 processes would not share them; a jobs table or Redis queue is the next step for a multi-process deployment.
+
+## 15. Phase 10b — Login and speed
+
+**Login without a database.** `LoginRequiredMiddleware` → `datatrust/web/auth.py`. One password from the
+environment; a signed, HttpOnly, SameSite=Lax cookie `"<expiry>.<HMAC-SHA256(secret, expiry | password
+fingerprint)>"`; constant-time comparison; per-address lockout after 5 failures; `next` restricted to local
+paths. Logout is POST (CSRF-protected). Production mode requires the password.
+
+**Speed: profile, then fix the measured hot spot.** On 300,000 rows the two slowest checks did string work on
+every row although columns have few distinct values. Working on distinct values (`pd.factorize` /
+`value_counts`) and mapping back made the whole analysis 28% faster with byte-identical results, proven by
+comparing against the old implementations. Note: the profiler first suggested a bigger win (3.7 s of 9.7 s);
+timed without it, the gain was smaller, because profiling inflates code with many small calls.

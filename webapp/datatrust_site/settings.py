@@ -39,6 +39,11 @@ if not SECRET_KEY:
         raise ImproperlyConfigured("Set DATATRUST_SECRET_KEY when DATATRUST_DEBUG=0.")
     SECRET_KEY = "dev-only-insecure-key-do-not-use-in-production"
 
+# Phase 10: login. Without a password the app is open (fine on your own computer, with the
+# default ALLOWED_HOSTS = localhost only). In production mode a password is required.
+if not DEBUG and not os.environ.get("DATATRUST_WEB_PASSWORD", "").strip():
+    raise ImproperlyConfigured("Set DATATRUST_WEB_PASSWORD when DATATRUST_DEBUG=0 (the web app needs a login).")
+
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DATATRUST_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
 
 INSTALLED_APPS = [
@@ -50,6 +55,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
+    "dashboard.middleware.LoginRequiredMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "dashboard.middleware.ContentSecurityPolicyMiddleware",
 ]

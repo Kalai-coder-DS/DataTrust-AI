@@ -3,6 +3,29 @@
 What changed in each phase, so you can see at a glance which files are new or modified.
 Each phase is also a Git tag (`git checkout phase-2` to see the project as it was).
 
+## Phase 10b — Login, speed, final README
+
+**Login** (no database: Option B)
+- `datatrust/web/auth.py` — signed 12-hour cookie (HMAC-SHA256 with the Django secret; includes a password
+  fingerprint, so changing the password logs everyone out), constant-time checks, 5 wrong passwords → 60 s
+  lockout, `next` limited to this site
+- `webapp/dashboard/middleware.py` — `LoginRequiredMiddleware`; `views.py` / `urls.py` — `/login/`, `/logout/` (POST)
+- `templates/dashboard/login.html`; Log out button in `base.html`
+- `webapp/datatrust_site/settings.py` — production mode refuses to start without `DATATRUST_WEB_PASSWORD`
+- `tests/test_auth.py` (22 tests), 9 Django login tests; existing Django tests switch the login off explicitly
+
+**Speed** (measured, results proven identical)
+- Profiled a 300,000-row file. The placeholder check and the spelling-variant check cleaned the text of every
+  row; they now work on distinct values and map the answer back. Whole analysis: 4.95 s → 3.58 s (28% faster).
+- `datatrust/quality/rules.py`, `datatrust/quality/consistency.py`
+- `tests/test_speedups.py` — 12 tests comparing both with the old row-by-row versions on random messy data;
+  the full analysis output (quality, statistics, scores, profile) was also compared on 9 files: identical
+
+**README** rewritten as the project's front page (features, quick start, design decisions, limitations,
+tested-on), with 3 screenshots in `docs/screenshots/`; `.env.example` lists the login settings.
+
+**Tests:** 370 → 405 (Django page tests inside them: 37 → 46)
+
 ## Phase 10a — Background analyses
 
 Uploads return at once; an "Analysing..." page refreshes every 3 seconds and opens the run page when ready.

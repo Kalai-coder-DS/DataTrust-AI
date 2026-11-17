@@ -37,10 +37,15 @@ def disguised_missing_mask(series: pd.Series, settings: Settings) -> pd.Series:
     if pd.api.types.is_numeric_dtype(series) and not pd.api.types.is_bool_dtype(series):
         return series.isin(settings.sentinel_numbers) & non_null
 
-    text = series[non_null].astype(str).str.strip().str.lower()
+    # Phase 10 speed-up: judge each DISTINCT value once, then map the answer back to the rows.
+    # A 300,000-row column usually has a handful of distinct labels; the string work (str, strip,
+    # lower) on every row was the single slowest step of the whole analysis (3.7 s of 9.7 s).
+    values = series[non_null]
+    codes, uniques = pd.factorize(values)
+    text = pd.Index(uniques).astype(str).str.strip().str.lower()
     tokens = set(settings.disguised_missing_tokens)
-    hits = text.isin(tokens) | (text == "")  # whitespace-only strings strip to ""
-    mask.loc[hits.index] = hits
+    is_placeholder = np.asarray(text.isin(tokens) | (text == ""))   # whitespace-only strings strip to ""
+    mask.loc[values.index] = is_placeholder[codes]
     return mask
 
 
