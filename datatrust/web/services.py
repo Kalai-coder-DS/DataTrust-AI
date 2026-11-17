@@ -24,6 +24,7 @@ from typing import Iterable, Iterator
 from datatrust.config import DEFAULT_SETTINGS, Settings
 from datatrust.exceptions import DataTrustError
 from datatrust.logger import get_logger
+from datatrust.genai.present import summary_view
 from datatrust.ml.present import baseline_view, importance_view
 from datatrust.pipeline import analyze_file
 from datatrust.reporting.html_report import GRADE_CLASS, GRADE_MEANING, SEVERITY_DISPLAY
@@ -122,6 +123,7 @@ def analyze_upload(
     size: int | None = None,
     settings: Settings = DEFAULT_SETTINGS,
     baseline: bool = False,
+    summary: str | None = None,
 ) -> int:
     """
     Save the uploaded bytes to a private temporary folder, run the full pipeline (the same
@@ -133,6 +135,7 @@ def analyze_upload(
     and names like CON.csv). Found by running the Django tests on Windows.
 
     baseline=True also trains the Phase 7 baseline model (only when a target is given).
+    summary="auto" / "template" / "ollama" / "claude" adds the Phase 9 plain-language summary.
     """
     name = validate_upload(file_name, size, settings)
     target = (target or "").strip() or None
@@ -149,7 +152,8 @@ def analyze_upload(
         if written == 0:
             raise UploadRejected(f"'{name}' is empty.")
         try:
-            analysis = analyze_file(path, target=target, baseline=baseline and target is not None, name=name)
+            analysis = analyze_file(path, target=target, baseline=baseline and target is not None, name=name,
+                                    summary=summary or None)
         except ValueError as exc:            # invalid target column
             raise UploadRejected(str(exc)) from exc
         except UploadRejected:
@@ -255,5 +259,6 @@ def run_page(repo: AnalysisRepository, run_id: int) -> dict:
         ],
         "total_issues": q["total_issues"],
         "baseline": baseline_view(a.get("ml")),
+        "summary": summary_view(a.get("summary")),
         "importance": importance_view(a.get("ml")),
     }

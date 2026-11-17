@@ -4,7 +4,7 @@
 
 Upload a CSV and find out whether it can be trusted — and whether it's ready for Machine Learning.
 
-> Status: **Phase 8 — What the model relies on** (Phases 1–7 ✅ verified).
+> Status: **Phase 9 — Plain-language summaries** (Phases 1–8 ✅ verified).
 > What changed in each phase: [CHANGELOG.md](CHANGELOG.md)
 > See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the architecture and the full phase plan.
 
@@ -56,15 +56,31 @@ The web app uses the same database as `--save` (your MySQL via `.env`), through
    (`.env` is in `.gitignore`: it never goes to GitHub)
 3. `python scripts/db.py init` → creates database `datatrust` and its 3 tables
 
-## Phase 8 verification checklist
+## Plain-language summaries (Phase 9)
 
-- [ ] `python -m pytest` → **all passed, 0 skipped** (about 3 minutes: models are trained)
-- [ ] `python main.py data/sample/customers_dirty.csv --target churned --baseline` → after BASELINE MODEL, a
-      **WHAT THE MODEL RELIES ON** section: only `tenure_months` is relied on (the sample's churn was generated
-      from tenure alone), and the columns with problems are listed under "Can wait"
-- [ ] `python main.py ..\CarPrice_Assignment.csv --target price --baseline` → the columns price depends on;
-      any marked `!` are relied on AND have a data problem: fix those first
-- [ ] Web app: upload with a target and the box ticked → run page and full report show **What the model relies on**
+```bash
+python main.py data/sample/customers_dirty.csv --target churned --baseline --summary            # best available
+python main.py data/sample/customers_dirty.csv --target churned --summary template               # offline, instant
+```
+
+| Provider | Needs | Notes |
+|---|---|---|
+| `template` | nothing | default fallback; offline, instant, same text every time |
+| `ollama` | [Ollama](https://ollama.com) installed + `ollama pull llama3.2:3b` | free, local, data never leaves the computer; 30-90 s on a laptop without a GPU |
+| `claude` | `ANTHROPIC_API_KEY` in `.env` | paid per use; fastest and best writing |
+| `auto` | — | Claude if a key is set, else Ollama if running, else template |
+
+Every provider gets the same verified facts. AI text that contains a number not in the analysis is rejected, and any
+failure falls back to the template with the reason shown. Scores always come from the engine, never from the AI.
+
+## Phase 9 verification checklist
+
+- [ ] `python -m pytest` → **all passed, 0 skipped**, with no internet needed
+- [ ] `python main.py data/sample/customers_dirty.csv --target churned --baseline --summary template` →
+      a **PLAIN-LANGUAGE SUMMARY** at the end
+- [ ] `--summary claude` without a key → template summary plus "ANTHROPIC_API_KEY is not set"
+- [ ] Web app: the upload form has **Plain-language summary**; the run page shows a **Summary** under the scores
+- [ ] Optional: install Ollama, `ollama pull llama3.2:3b`, then `--summary ollama` → "Local AI (Ollama), model llama3.2:3b"
 
 On Windows, if `python` points to another installation, use `.venv\Scripts\python.exe` instead of `python`.
 
@@ -82,6 +98,12 @@ Override via environment variables (no code changes):
 | `DATATRUST_SECRET_KEY` | (dev key) | Web app: required when `DATATRUST_DEBUG=0` |
 | `DATATRUST_ALLOWED_HOSTS` | localhost,127.0.0.1 | Web app: host names it answers to |
 | `DATATRUST_ML_MAX_ROWS` | 20000 | Baseline model: rows used (a class-stratified sample above this) |
+| `DATATRUST_SUMMARY_PROVIDER` | auto | Summary: auto / template / ollama / claude |
+| `ANTHROPIC_API_KEY` | (none) | Enables the Claude provider. Keep it in `.env` only |
+| `DATATRUST_CLAUDE_MODEL` | claude-haiku-5-5 | Claude model |
+| `DATATRUST_OLLAMA_URL` | http://localhost:11434 | Ollama server |
+| `DATATRUST_OLLAMA_MODEL` | llama3.2:3b | Local model (about 2 GB) |
+| `DATATRUST_AI_TIMEOUT` | 120 | Seconds to wait for an AI answer |
 
 ## Note on pandas versions
 

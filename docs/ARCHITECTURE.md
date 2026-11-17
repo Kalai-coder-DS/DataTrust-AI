@@ -74,7 +74,7 @@ datatrust-ai/
 │   ├── storage/                  # Ph 5b: MySQL/SQLite repository layer
 │   ├── ml/                       # Ph 7: baseline model, raw vs cleaned (features, baseline, present)
 │   ├── explain/                  # Ph 8: SHAP
-│   └── genai/                    # Ph 9: plain-language explanations
+│   └── genai/                    # Ph 9: plain-language summaries (facts, guard, providers, summary)
 │   ├── web/                      # Ph 6: framework-free page logic for Django (services, charts)
 ├── webapp/                       # Ph 6: Django project (manage.py, datatrust_site/, dashboard/)
 ├── scripts/generate_sample_data.py
@@ -463,3 +463,36 @@ The scores say whether data is *healthy*; Phase 7 checks what that means for an 
 - "Can wait" is about *this* model only: a simpler model, or a dashboard reading the raw values, can still be
   hurt by those problems.
 - Importance is computed on the cleaned data, so it describes the model you get after following the report.
+
+## 13. Phase 9 — Plain-language summaries
+
+```
+analysis (Phases 1-8) ──► facts.py ──► provider ──► guard.py ──► summary
+                          verified      template      numbers      text + who wrote it
+                          numbers       ollama        must be in   + why it fell back
+                          only          claude        the facts
+                                          │ any failure
+                                          └──────────► template
+```
+
+### Key design decisions (interview talking points)
+
+1. **The AI explains; the engine decides.** Providers receive only facts copied from the analysis. The
+   report always shows the engine's scores; the summary is a separate, labelled section.
+2. **Grounding is enforced, not requested.** The prompt tells the model to use only the facts, and
+   `guard.py` then rejects any text with a number that is not in them (an invented or recalculated score,
+   percentage or count). Rejected text falls back to the template, and the reason is shown.
+3. **Graceful degradation.** `auto` = Claude if a key is set, else a running Ollama with the model downloaded
+   (2-second check), else the template. The tool never fails because an AI is missing or down.
+4. **Privacy option.** Ollama runs the model on the user's computer: no data leaves it, no cost, no key.
+5. **No new dependencies.** Both APIs are plain HTTP + JSON through `urllib`; the transport is injected, so the
+   27 tests run with a fake and the network blocked.
+6. **Secrets.** Keys only from the environment / `.env` (git-ignored); masked in errors; never stored in results.
+
+### Known limitations
+
+- The guard checks numbers, not wording: an AI can still phrase something vaguely or emphasise the wrong
+  point. Labelling the source ("Claude API", "Local AI") lets the reader judge.
+- Small local models on a CPU are slow (30-90 s) and write less well than the Claude API; a web upload waits
+  that long. Background jobs are a Phase 10 item.
+- The summary is written once, at analysis time, and stored; it does not change if the report is re-rendered.

@@ -17,6 +17,17 @@ class UploadForm(forms.Form):
         help_text="The column a model would predict, e.g. churned or charges. "
                   "Leave empty for a data-quality check only.",
     )
+    summary = forms.ChoiceField(
+        label="Plain-language summary",
+        required=False,
+        initial="auto",
+        choices=[("auto", "Best available (Claude API, then local AI, then template)"),
+                 ("template", "Template only (offline, instant)"),
+                 ("ollama", "Local AI (Ollama)"),
+                 ("claude", "Claude API"),
+                 ("", "No summary")],
+        help_text="If an AI provider is not set up or fails, the template summary is used and the page says why.",
+    )
     baseline = forms.BooleanField(
         label="Also train a baseline model on the target (raw vs cleaned data)",
         required=False,

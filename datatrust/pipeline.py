@@ -28,13 +28,15 @@ logger = get_logger(__name__)
 
 
 def analyze_file(path: str | Path, target: str | None = None, baseline: bool = False,
-                 name: str | None = None) -> dict:
+                 name: str | None = None, summary: str | None = None) -> dict:
     """
     Run every phase on a CSV file and return the full analysis as a JSON-serialisable dict.
 
     baseline=True (Phase 7) also trains a baseline model on the target column, on the raw and
     on the cleaned data; the result is under "ml". It needs a target.
     name: the file name to report (the web app saves uploads under a safe temporary name).
+    summary (Phase 9): "auto", "template", "ollama" or "claude" adds a plain-language summary under
+    "summary", written from the finished analysis. None (the default) adds nothing.
 
     Raises DataTrustError for unusable files and ValueError for an invalid target.
     """
@@ -64,6 +66,9 @@ def analyze_file(path: str | Path, target: str | None = None, baseline: bool = F
     if baseline:
         from datatrust.ml import run_baseline   # imported here: scikit-learn loads only when needed
         analysis["ml"] = run_baseline(df, analysis, target)
+    if summary:
+        from datatrust.genai import summarize   # last: it explains everything above, never changes it
+        analysis["summary"] = summarize(analysis, provider=summary)
     return analysis
 
 
