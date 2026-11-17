@@ -17,8 +17,11 @@ MAX_ACTIONS = 5
 SEVERITY_ORDER = ("critical", "high", "medium", "low")
 
 
+GRADE_MEANING = {"A": "excellent", "B": "good", "C": "usable with fixes", "D": "poor", "F": "not usable as-is"}
+
+
 def _score(s: dict) -> dict:
-    return {"score": s["score"], "grade": s["grade"],
+    return {"score": s["score"], "grade": s["grade"], "grade_means": GRADE_MEANING.get(s["grade"], ""),
             "dimensions": {d["name"]: d["score"] for d in s["dimensions"]}}
 
 
@@ -33,6 +36,7 @@ def build_facts(analysis: dict) -> dict:
         "data_trust": _score(analysis["scores"]["trust"]),
         "ml_readiness": _score(analysis["scores"]["ml_readiness"]),
         "issue_counts": {**{s: q["severity_counts"].get(s, 0) for s in SEVERITY_ORDER}, "total": q["total_issues"]},
+        "issues_listed_below": len(issues),
         "top_issues": [{"severity": i["severity"], "column": i["column"], "message": i["message"],
                         "affected_rows": i["affected_rows"]} for i in issues],
         "top_actions": [{"gain": a["impact"], "problem": a["reason"], "action": a["recommendation"]}
@@ -44,6 +48,7 @@ def build_facts(analysis: dict) -> dict:
         facts["model"] = {
             "metric": ml["metric"]["label"],
             "guessing": cleaned["guess"],
+            "beats_guessing_by": cleaned["lift"],
             "raw_data": ml["raw"].get("score"),
             "after_cleaning": ml["cleaned"].get("score"),
             "change_after_cleaning": ml.get("change"),

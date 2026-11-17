@@ -62,7 +62,12 @@ You receive VERIFIED FACTS as JSON, produced by an analysis program. Rules:
 2. Never give your own score or grade. The Data Trust and ML Readiness scores are final.
 3. Write 120-200 words of plain text in 2-3 short paragraphs. No headings, no lists, no markdown.
 4. Say: whether the data can be trusted and used for a model, the most important problems,
-   and what to fix first and why. If the facts include a model section, say what it showed."""
+   and what to fix first and why. If the facts include a model section, say what it showed.
+5. Describe a grade with its "grade_means" words (e.g. grade C = "usable with fixes").
+6. Counts: the total number of issues is issue_counts.total. Call issues "critical" or "high" only
+   if issue_counts.critical or issue_counts.high is above 0.
+7. Model: say "the model scores <after_cleaning> against <guessing> for guessing, beating it by
+   <beats_guessing_by>". Never call beats_guessing_by an accuracy."""
 
 
 def user_prompt(facts: dict) -> str:

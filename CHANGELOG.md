@@ -3,6 +3,20 @@
 What changed in each phase, so you can see at a glance which files are new or modified.
 Each phase is also a Git tag (`git checkout phase-2` to see the project as it was).
 
+## Phase 9 fix — guard checks what numbers mean
+
+First real run with Ollama (llama3.2:3b, Windows) wrote "seven problems" (12 exist), "beats guessing by a
+balanced accuracy of 0.693" (the lift is 0.193) and "the most critical problems" (0 critical). Each number also
+appeared elsewhere in the facts, so the number check passed them.
+
+- `datatrust/genai/guard.py` — new checks: "<N> issues/problems" (digits or words) must be a real issue count;
+  "beats guessing by X" must be the real lift; "critical"/"high" issues only when there are some
+- `datatrust/genai/facts.py` — adds `grade_means`, `issues_listed_below`, `model.beats_guessing_by`
+- `datatrust/genai/providers.py` — prompt rules for grades, counts and the model comparison
+- `tests/test_genai.py` — 8 tests, including the exact text Ollama produced (now rejected)
+
+**Tests:** 343 → 351
+
 ## Phase 9 — Plain-language summaries (template, Ollama, Claude API)
 
 Three providers behind one interface. The template is the default and always works offline; Ollama (local, free)

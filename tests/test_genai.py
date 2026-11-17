@@ -259,3 +259,56 @@ def test_cli_summary(sample_dir, capsys):
     assert "PLAIN-LANGUAGE SUMMARY: Template summary (offline)" in capsys.readouterr().out
     with pytest.raises(SystemExit):
         run([str(sample_dir / "customers_clean.csv"), "--summary", "gpt"])
+
+
+# ------------------------------------------------------------------ Phase 9 fix: meaning checks
+# Written by llama3.2:3b through Ollama on the sample file (Windows, 17 Nov 2026). It passed the
+# first guard because every number in it also exists somewhere in the facts.
+REAL_OLLAMA_TEXT = (
+    "The ML readiness score is also 79.8, with a grade of \"C\", indicating that the data is suitable for "
+    "machine learning models. However, there are some issues with data quality, such as duplicate rows and "
+    "placeholder values in the \"gender\" column.\n\n"
+    "The top issues list highlights seven problems, including missing values, non-numeric values, and "
+    "duplicate rows.\n\n"
+    "The model section shows that the model beats guessing by a balanced accuracy of 0.693, indicating that "
+    "the features do carry signal about the \"churned\" target.\n\n"
+    "Overall, the data quality report suggests that the dataset has some issues that need to be addressed "
+    "before it can be used for machine learning models. The most critical problems are related to data quality."
+)
+
+
+def test_real_ollama_mistakes_are_now_rejected(analysis):
+    f = build_facts(analysis)
+    with pytest.raises(SummaryRejected, match="'seven problems', but the issue counts are 12 in total"):
+        check_summary(REAL_OLLAMA_TEXT, f)
+
+
+@pytest.mark.parametrize("bad, why", [
+    ("The report found 7 issues.", "issue counts are 12"),
+    ("The model beats guessing by a balanced accuracy of 0.693.", "beats guessing by 0.193"),
+    ("The most critical problems are in 'gender'.", "no issue is critical"),
+    ("There are high-severity issues in 'age'.", "no issue is high"),
+])
+def test_each_meaning_check(analysis, bad, why):
+    with pytest.raises(SummaryRejected, match=why):
+        check_summary(bad, build_facts(analysis))
+
+
+def test_correct_phrasing_passes(analysis):
+    f = build_facts(analysis)
+    ok = ("The check found twelve issues, 9 medium and 3 low; the report lists 8 problems below. "
+          "The model scores 0.693 against 0.5 for guessing, beating it by 0.193. "
+          "Grade C means usable with fixes.")
+    assert check_summary(ok, f) == ok
+    assert check_summary("The model beats guessing by 0.193.", f)
+
+
+def test_facts_carry_the_values_the_prompt_asks_for(analysis):
+    f = build_facts(analysis)
+    assert f["data_trust"]["grade_means"] == "usable with fixes"
+    assert f["issues_listed_below"] == 8 and f["model"]["beats_guessing_by"] == analysis["ml"]["cleaned"]["lift"]
+
+
+def test_real_mistakes_fall_back_to_the_template(analysis):
+    r = summarize(analysis, "ollama", environ={}, transport=FakeTransport(ollama_text=REAL_OLLAMA_TEXT))
+    assert r["provider"] == "template" and "'seven problems'" in r["fallback_reason"]

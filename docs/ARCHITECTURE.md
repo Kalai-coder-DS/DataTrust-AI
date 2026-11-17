@@ -491,8 +491,10 @@ analysis (Phases 1-8) ──► facts.py ──► provider ──► guard.py �
 
 ### Known limitations
 
-- The guard checks numbers, not wording: an AI can still phrase something vaguely or emphasise the wrong
-  point. Labelling the source ("Claude API", "Local AI") lets the reader judge.
+- The guard checks every number, and what the key numbers describe (issue counts, the model's lift,
+  "critical"/"high"). Other wording can still be vague or overstated (e.g. calling grade C "suitable");
+  labelling the source ("Claude API", "Local AI") lets the reader judge. Found on the first real Ollama
+  run, which produced three such mistakes; the first fix added the meaning checks.
 - Small local models on a CPU are slow (30-90 s) and write less well than the Claude API; a web upload waits
   that long. Background jobs are a Phase 10 item.
 - The summary is written once, at analysis time, and stored; it does not change if the report is re-rendered.
