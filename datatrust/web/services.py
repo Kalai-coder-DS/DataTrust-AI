@@ -115,6 +115,63 @@ def validate_upload(name: str, size: int | None, settings: Settings = DEFAULT_SE
     return cleaned
 
 
+def _save_chunks(chunks: Iterable[bytes], path: Path, name: str, settings: Settings) -> int:
+    """Write the upload to path, enforcing the size limit while streaming. Returns the bytes written."""
+    written = 0
+    with path.open("wb") as fh:
+        for chunk in chunks:
+            written += len(chunk)
+            if written > settings.max_file_size_bytes:   # don't trust the declared size
+                raise UploadRejected(f"'{name}' is larger than the {settings.max_file_size_mb} MB limit.")
+            fh.write(chunk)
+    if written == 0:
+        raise UploadRejected(f"'{name}' is empty.")
+    return written
+
+
+def _file_chunks(path: Path, size: int = 1024 * 1024) -> Iterator[bytes]:
+    with path.open("rb") as fh:
+        while chunk := fh.read(size):
+            yield chunk
+
+
+def start_upload_job(
+    jobs,
+    chunks: Iterable[bytes],
+    file_name: str,
+    target: str | None = None,
+    size: int | None = None,
+    settings: Settings = DEFAULT_SETTINGS,
+    baseline: bool = False,
+    summary: str | None = None,
+    environ: dict | None = None,
+) -> str:
+    """
+    Phase 10: the fast checks (name, type, size, empty) happen NOW, so a wrong file is reported
+    on the form at once. The bytes are copied to a private folder before the request ends (the
+    web server deletes its own copy then), and the analysis runs in a background job.
+    Returns the job id.
+    """
+    name = validate_upload(file_name, size, settings)
+    staging = Path(tempfile.mkdtemp(prefix="datatrust-job-"))
+    try:
+        staged = staging / TEMP_FILE_NAME
+        written = _save_chunks(chunks, staged, name, settings)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+
+    def work() -> int:
+        try:
+            with repository(environ) as repo:
+                return analyze_upload(_file_chunks(staged), name, repo, target=target, size=written,
+                                      settings=settings, baseline=baseline, summary=summary)
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+
+    return jobs.submit(work, label=name)
+
+
 def analyze_upload(
     chunks: Iterable[bytes],
     file_name: str,
@@ -142,15 +199,7 @@ def analyze_upload(
     workdir = Path(tempfile.mkdtemp(prefix="datatrust-upload-"))
     try:
         path = workdir / TEMP_FILE_NAME
-        written = 0
-        with path.open("wb") as fh:
-            for chunk in chunks:
-                written += len(chunk)
-                if written > settings.max_file_size_bytes:   # don't trust the declared size
-                    raise UploadRejected(f"'{name}' is larger than the {settings.max_file_size_mb} MB limit.")
-                fh.write(chunk)
-        if written == 0:
-            raise UploadRejected(f"'{name}' is empty.")
+        _save_chunks(chunks, path, name, settings)
         try:
             analysis = analyze_file(path, target=target, baseline=baseline and target is not None, name=name,
                                     summary=summary or None)

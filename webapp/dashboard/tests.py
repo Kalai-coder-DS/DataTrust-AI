@@ -38,6 +38,7 @@ class WebTestCase(SimpleTestCase):
         patcher = mock.patch.dict(os.environ, {
             "DATATRUST_DB": "sqlite",
             "DATATRUST_SQLITE_PATH": str(Path(self.tmp) / "web.db"),
+            "DATATRUST_WEB_BACKGROUND": "0",       # analyse inside the request (Phase 10 tests switch it on)
         })
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -190,6 +191,62 @@ class SummaryTests(WebTestCase):
         r = self.client.post(reverse("dashboard:upload"),
                              {"file": csv_upload(SAMPLE_DIR / "customers_clean.csv"), "summary": ""})
         self.assertTemplateNotUsed(self.client.get(r["Location"]), "dashboard/_summary.html")
+
+
+class BackgroundJobTests(WebTestCase):
+    """Phase 10: uploads analysed in a background thread."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.dict(os.environ, {"DATATRUST_WEB_BACKGROUND": "1"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def job_id(self, response):
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response["Location"].startswith("/jobs/"), response["Location"])
+        return response["Location"].rstrip("/").split("/")[-1]
+
+    def test_upload_returns_at_once_then_opens_the_run(self):
+        from dashboard.views import jobs
+        job_id = self.job_id(self.upload(SAMPLE_DIR / "customers_dirty.csv", target="churned"))
+        self.assertEqual(jobs.wait(job_id, 60)["state"], "done")
+        r = self.client.get(reverse("dashboard:job", args=[job_id]))
+        self.assertRedirects(r, reverse("dashboard:run", args=[1]))
+        self.assertContains(self.client.get(r["Location"]), "79.8")
+
+    def test_running_page_refreshes_itself(self):
+        import threading
+        from dashboard.views import jobs
+        release = threading.Event()
+        job_id = jobs.submit(lambda: release.wait(10) and 1, label="slow.csv")
+        try:
+            r = self.client.get(reverse("dashboard:job", args=[job_id]))
+            self.assertEqual(r.status_code, 200)
+            self.assertContains(r, '<meta http-equiv="refresh" content="3">')
+            self.assertContains(r, "slow.csv")
+        finally:
+            release.set()
+            jobs.wait(job_id, 10)
+
+    def test_bad_target_shows_the_message_on_the_job_page(self):
+        from dashboard.views import jobs
+        job_id = self.job_id(self.upload(SAMPLE_DIR / "customers_clean.csv", target="nope"))
+        jobs.wait(job_id, 30)
+        r = self.client.get(reverse("dashboard:job", args=[job_id]))
+        self.assertEqual(r.status_code, 400)
+        self.assertContains(r, "not found. Available", status_code=400)
+        self.assertNotContains(r, "http-equiv", status_code=400)
+
+    def test_wrong_file_type_is_still_rejected_on_the_form(self):
+        r = self.upload(name="numbers.xlsx", content=b"a,b\n1,2\n")
+        self.assertEqual(r.status_code, 400)
+        self.assertContains(r, "is not a CSV file", status_code=400)
+
+    def test_unknown_or_malformed_job_is_404(self):
+        self.assertEqual(self.client.get(reverse("dashboard:job", args=["0" * 32])).status_code, 404)
+        self.assertEqual(self.client.get("/jobs/../../etc/").status_code, 404)
+        self.assertEqual(self.client.get(reverse("dashboard:job", args=["x" * 32])).status_code, 404)
 
 
 class DatasetPageTests(WebTestCase):

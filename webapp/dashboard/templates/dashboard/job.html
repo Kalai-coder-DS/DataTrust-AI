@@ -1,0 +1,26 @@
+{% extends "dashboard/base.html" %}
+{% block title %}{% if job.state == "failed" %}Analysis failed{% else %}Analysing {{ job.label }}{% endif %}{% endblock %}
+{% block head %}{% if job.state == "queued" or job.state == "running" %}<meta http-equiv="refresh" content="{{ refresh_seconds }}">{% endif %}{% endblock %}
+{% block content %}
+{% if job.state == "failed" %}
+<section class="empty" role="alert">
+  <p class="eyebrow">Analysis failed</p>
+  <h1>{{ job.label }}</h1>
+  <p class="muted">{{ job.error }}</p>
+  <p class="buttons" style="justify-content:center">
+    <a class="button primary" href="{% url 'dashboard:upload' %}">Try another file</a>
+    <a class="button" href="{% url 'dashboard:home' %}">Dashboard</a>
+  </p>
+</section>
+{% else %}
+<section class="empty" role="status" aria-live="polite">
+  <p class="eyebrow">{% if job.state == "queued" %}Waiting for a free slot{% else %}Analysing{% endif %} · {{ job.elapsed }} s</p>
+  <h1>{{ job.label }}</h1>
+  <p class="muted">Checking quality, scoring, and (if you asked for them) training the baseline model and writing
+     the summary. This page refreshes every {{ refresh_seconds }} seconds and opens the results when they are ready.</p>
+  <p class="help">A local AI summary can take a few minutes on a laptop. You can leave this page; the run will
+     appear on the dashboard when it is done.</p>
+  <p class="buttons" style="justify-content:center"><a class="button" href="{% url 'dashboard:home' %}">Dashboard</a></p>
+</section>
+{% endif %}
+{% endblock %}

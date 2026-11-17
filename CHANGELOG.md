@@ -3,6 +3,27 @@
 What changed in each phase, so you can see at a glance which files are new or modified.
 Each phase is also a Git tag (`git checkout phase-2` to see the project as it was).
 
+## Phase 10a — Background analyses
+
+Uploads return at once; an "Analysing..." page refreshes every 3 seconds and opens the run page when ready.
+Model training and slow local AI summaries no longer freeze the browser.
+
+**New files**
+- `datatrust/web/jobs.py` — `JobManager`: background threads (standard library), states, error classification
+- `webapp/dashboard/templates/dashboard/job.html` — Analysing / Analysis failed page (no JavaScript: meta refresh)
+- `tests/test_jobs.py` — 12 tests with real threads
+
+**Modified files**
+- `datatrust/web/services.py` — `start_upload_job`: fast checks during the request, analysis in a job;
+  shared `_save_chunks` keeps the size limit in one place
+- `webapp/dashboard/views.py`, `urls.py` — upload starts a job; new `/jobs/<id>/` page
+- `webapp/dashboard/templates/dashboard/base.html` — `head` block
+- `webapp/dashboard/tests.py` — existing tests use `DATATRUST_WEB_BACKGROUND=0`; 5 new background tests
+- `tests/test_webapp.py` — template check covers `job.html`
+- `datatrust/genai/providers.py` — prompt: "most important", never "most critical" (seen with qwen2.5:7b)
+
+**Tests:** 358 → 370 (Django page tests inside them: 32 → 37)
+
 ## Phase 9 fix 2 — no false alarms on "no critical issues"; show rejected text
 
 Found on real runs: qwen2.5:7b and llama3.2:3b were both rejected for mentioning "critical issues" when the

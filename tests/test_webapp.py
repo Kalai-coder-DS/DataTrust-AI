@@ -210,6 +210,9 @@ def pages(sample_dir, tmp_path_factory):
         "dashboard/run.html": run_page(repo, run_id),
         "dashboard/upload.html": {"form": object(), "limit_mb": 200},
         "dashboard/error.html": {"status": 404, "title": "Not found", "message": "x"},
+        "dashboard/job.html": {"refresh_seconds": 3, "job": {
+            "id": "a" * 32, "label": "insurance.csv", "state": "running", "run_id": None, "error": None,
+            "error_kind": None, "elapsed": 4.2}},
     }
     db.close()
     return data

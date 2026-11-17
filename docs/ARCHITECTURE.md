@@ -498,3 +498,22 @@ analysis (Phases 1-8) ──► facts.py ──► provider ──► guard.py �
 - Small local models on a CPU are slow (30-90 s) and write less well than the Claude API; a web upload waits
   that long. Background jobs are a Phase 10 item.
 - The summary is written once, at analysis time, and stored; it does not change if the report is re-rendered.
+
+## 14. Phase 10a — Background analyses
+
+```
+POST /upload/ ── fast checks (type, size, empty) ──► form error at once
+      │ ok: bytes copied to a private folder
+      ▼
+JobManager (thread pool, 2 workers) ── analyze_upload ── repository ──► MySQL
+      │
+GET /jobs/<id>/  queued/running → "Analysing..." (meta refresh 3 s)
+                 done           → redirect to /runs/<id>/
+                 failed         → message (400 bad file, 503 database, 500 internal)
+```
+
+Design decisions: standard library only (no Celery/Redis); one database connection per job; random 128-bit
+job ids; errors classified, internals kept in the log; `DATATRUST_WEB_BACKGROUND=0` keeps the old behaviour.
+
+Limits: jobs live in the server process's memory. A restart forgets running jobs, and several server
+processes would not share them; a jobs table or Redis queue is the next step for a multi-process deployment.

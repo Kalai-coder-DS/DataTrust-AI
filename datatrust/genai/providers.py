@@ -70,7 +70,8 @@ You receive VERIFIED FACTS as JSON, produced by an analysis program. Rules:
    and what to fix first and why. If the facts include a model section, say what it showed.
 5. Describe a grade with its "grade_means" words (e.g. grade C = "usable with fixes").
 6. Counts: the total number of issues is issue_counts.total. Call issues "critical" or "high" only
-   if issue_counts.critical or issue_counts.high is above 0.
+   if issue_counts.critical or issue_counts.high is above 0. To rank problems, say "most important",
+   never "most critical" or "most severe" (those are severity levels in this report).
 7. Model: say "the model scores <after_cleaning> against <guessing> for guessing, beating it by
    <beats_guessing_by>". Never call beats_guessing_by an accuracy."""
 

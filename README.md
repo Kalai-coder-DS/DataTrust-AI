@@ -4,7 +4,7 @@
 
 Upload a CSV and find out whether it can be trusted — and whether it's ready for Machine Learning.
 
-> Status: **Phase 9 — Plain-language summaries** (Phases 1–8 ✅ verified).
+> Status: **Phase 10a — Background analyses** (Phases 1–9 ✅ verified).
 > What changed in each phase: [CHANGELOG.md](CHANGELOG.md)
 > See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the architecture and the full phase plan.
 
@@ -73,14 +73,14 @@ python main.py data/sample/customers_dirty.csv --target churned --summary templa
 Every provider gets the same verified facts. AI text that contains a number not in the analysis is rejected, and any
 failure falls back to the template with the reason shown. Scores always come from the engine, never from the AI.
 
-## Phase 9 verification checklist
+## Phase 10a verification checklist
 
-- [ ] `python -m pytest` → **all passed, 0 skipped**, with no internet needed
-- [ ] `python main.py data/sample/customers_dirty.csv --target churned --baseline --summary template` →
-      a **PLAIN-LANGUAGE SUMMARY** at the end
-- [ ] `--summary claude` without a key → template summary plus "ANTHROPIC_API_KEY is not set"
-- [ ] Web app: the upload form has **Plain-language summary**; the run page shows a **Summary** under the scores
-- [ ] Optional: install Ollama, `ollama pull llama3.2:3b`, then `--summary ollama` → "Local AI (Ollama), model llama3.2:3b"
+- [ ] `python -m pytest` → **all passed, 0 skipped**
+- [ ] `python webapp\manage.py runserver`, upload `customers_dirty.csv` with target `churned` → an **Analysing...**
+      page appears at once, counts the seconds, and opens the run page by itself when it is done
+- [ ] Upload with target `nope` → the Analysing page turns into **Analysis failed** with the list of columns
+- [ ] Upload a `.xlsx` → rejected on the form straight away (no Analysing page)
+- [ ] With Ollama: choose **Local AI (Ollama)**; while it writes, open the Dashboard in another tab: the site stays usable
 
 On Windows, if `python` points to another installation, use `.venv\Scripts\python.exe` instead of `python`.
 
@@ -104,6 +104,8 @@ Override via environment variables (no code changes):
 | `DATATRUST_OLLAMA_URL` | http://localhost:11434 | Ollama server |
 | `DATATRUST_OLLAMA_MODEL` | llama3.2:3b | Local model (about 2 GB) |
 | `DATATRUST_AI_TIMEOUT` | 120 | Seconds to wait for an AI answer |
+| `DATATRUST_WEB_BACKGROUND` | 1 | Web app: `0` analyses inside the request (as before Phase 10) |
+| `DATATRUST_WEB_WORKERS` | 2 | Web app: analyses that can run at the same time |
 
 ## Note on pandas versions
 
