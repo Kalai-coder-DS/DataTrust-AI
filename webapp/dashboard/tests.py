@@ -589,3 +589,23 @@ class LocalModeUnchangedTests(WebTestCase):
         r = self.client.generic("POST", reverse("dashboard:upload"), b"x", content_type="multipart/form-data",
                                 CONTENT_LENGTH=str(10 ** 12))
         self.assertEqual(r.status_code, 413)
+
+
+class HeadRequestTests(WebTestCase):
+    """Deployment fix: Render's wake-up page and uptime monitors check the site with HEAD requests."""
+
+    def test_every_page_answers_head(self):
+        run = self.upload(content=TINY_CSV, name="head.csv")
+        run_id = int(run["Location"].rstrip("/").split("/")[-1])
+        for url in (reverse("dashboard:home"), reverse("dashboard:upload"),
+                    reverse("dashboard:dataset", args=["head.csv"]), reverse("dashboard:run", args=[run_id]),
+                    reverse("dashboard:report", args=[run_id]), reverse("dashboard:json", args=[run_id])):
+            self.assertEqual(self.client.head(url).status_code, 200, url)
+
+    @override_settings(DATATRUST_PUBLIC_DEMO=True)
+    def test_head_works_on_the_public_demo(self):
+        self.assertEqual(self.client.head(reverse("dashboard:home")).status_code, 200)
+
+    def test_other_methods_are_still_refused(self):
+        self.assertEqual(self.client.put(reverse("dashboard:home")).status_code, 405)
+        self.assertEqual(self.client.post(reverse("dashboard:home")).status_code, 405)

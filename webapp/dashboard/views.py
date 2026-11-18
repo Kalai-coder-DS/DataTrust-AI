@@ -21,7 +21,9 @@ import re
 from django.conf import settings
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
-from django.views.decorators.http import require_GET, require_http_methods
+# require_safe = GET and HEAD. HEAD ("are you there?") is what Render's wake-up page and uptime
+# monitors send; answering it with 405 made them think the site was down (Deployment fix).
+from django.views.decorators.http import require_http_methods, require_safe
 
 from datatrust.config import DEFAULT_SETTINGS
 from datatrust.logger import get_logger
@@ -110,7 +112,7 @@ def handles_errors(view):
     return wrapper
 
 
-@require_GET
+@require_safe
 @handles_errors
 def home(request):
     with repository() as repo:
@@ -118,7 +120,7 @@ def home(request):
     return render(request, "dashboard/home.html", page)
 
 
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "HEAD", "POST"])
 @handles_errors
 def upload(request):
     limit_mb = DEFAULT_SETTINGS.max_file_size_mb
@@ -158,7 +160,7 @@ def upload(request):
     return render(request, "dashboard/upload.html", {"form": UploadForm(), **context})
 
 
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "HEAD", "POST"])
 @handles_errors
 def login(request):
     """Phase 10: single-user login (password from DATATRUST_WEB_PASSWORD). See datatrust/web/auth.py."""
@@ -198,7 +200,7 @@ def logout(request):
     return response
 
 
-@require_GET
+@require_safe
 @handles_errors
 def job(request, job_id: str):
     """Phase 10: 'Analysing...' page. Refreshes itself until the run page is ready."""
@@ -215,7 +217,7 @@ def job(request, job_id: str):
     return render(request, "dashboard/job.html", {"job": found, "refresh_seconds": 3}, status=status)
 
 
-@require_GET
+@require_safe
 @handles_errors
 def dataset(request, name: str):
     with repository() as repo:
@@ -223,7 +225,7 @@ def dataset(request, name: str):
     return render(request, "dashboard/dataset.html", page)
 
 
-@require_GET
+@require_safe
 @handles_errors
 def run(request, run_id: int):
     with repository() as repo:
@@ -236,7 +238,7 @@ def _download(response: HttpResponse, filename: str) -> HttpResponse:
     return response
 
 
-@require_GET
+@require_safe
 @handles_errors
 def report(request, run_id: int):
     """The full self-contained HTML report (Phase 5a), re-rendered from the stored analysis."""
@@ -248,7 +250,7 @@ def report(request, run_id: int):
     return response
 
 
-@require_GET
+@require_safe
 @handles_errors
 def analysis_json(request, run_id: int):
     with repository() as repo:

@@ -3,6 +3,14 @@
 What changed in each phase, so you can see at a glance which files are new or modified.
 Each phase is also a Git tag (`git checkout phase-2` to see the project as it was).
 
+## Deployment fix — answer HEAD requests
+
+- The live demo stayed on Render's "waking up" page and UptimeRobot reported it down, although the app
+  was running. Both check a site with `HEAD` requests, and the page views only allowed `GET`, so they got
+  `405 Method Not Allowed`. Page views now use `require_safe` (GET + HEAD); forms allow GET, HEAD, POST.
+- `webapp/dashboard/views.py`; tests: 1 pytest check + 3 Django tests (HEAD on every page, on the demo,
+  other methods still 405). **Tests:** 436 → 437 (Django page tests 58 → 61)
+
 ## Deployment — Open public demo on Render
 
 **How it runs online**

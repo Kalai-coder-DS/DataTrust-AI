@@ -141,6 +141,7 @@ works, but `render.yaml` is the record of what runs.
 | Build log: `ModuleNotFoundError: gunicorn` at start | old `requirements.txt` without gunicorn | make sure the patch is pushed; redeploy |
 | Log: `ImproperlyConfigured: ... DATATRUST_SECRET_KEY` | the secret wasn't generated (service created by hand, not as a Blueprint) | **Environment**, then add `DATATRUST_SECRET_KEY` with a random value of 50+ characters (**Generate**) |
 | `Bad Request (400)` on every page | the hostname isn't allowed | Render normally sets `RENDER_EXTERNAL_HOSTNAME` itself; for a custom domain add it to `DATATRUST_ALLOWED_HOSTS` |
+| Stuck on Render's "waking up" page; UptimeRobot says Down; logs show `"HEAD / HTTP/1.1" 405` | page views allowed GET only, and these checks use HEAD | fixed in the "answer HEAD requests" patch: pages now answer HEAD with 200 |
 | The page loads for about a minute | the free server was asleep | normal on the free plan; open the link a minute before showing it to someone |
 | "Too many redirects" | `DATATRUST_HTTPS` is on, but the proxy header is missing (only outside Render) | on Render this doesn't happen; elsewhere set `DATATRUST_HTTPS=0` behind a proxy that doesn't send `X-Forwarded-Proto` |
 | My upload disappeared | restart, sleep, redeploy, or older than 24 h | expected (section 2); download the report if you want to keep it |

@@ -301,6 +301,15 @@ def test_production_mode_requires_a_web_password():
     assert result.returncode != 0 and "Set DATATRUST_WEB_PASSWORD" in result.stderr
 
 
+def test_page_views_answer_head_requests():
+    """Deployment fix: Render's wake-up page and uptime monitors send HEAD; GET-only views said 405."""
+    views = (WEBAPP / "dashboard" / "views.py").read_text(encoding="utf-8")
+    assert "require_GET" not in views
+    for methods in re.findall(r"@require_http_methods\((\[[^\]]*\])\)", views):
+        if '"GET"' in methods:
+            assert '"HEAD"' in methods, methods
+
+
 def _check_with(extra_env: dict, *args: str) -> subprocess.CompletedProcess:
     import os
     env = {**os.environ, **extra_env}
