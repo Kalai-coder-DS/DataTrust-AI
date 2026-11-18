@@ -81,6 +81,8 @@ form input[type=password]{width:100%;max-width:320px;padding:8px 10px;border:1px
 form select{padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-0);color:var(--text-primary);font:inherit;max-width:100%}
 form label.check{display:flex;gap:8px;align-items:center;font-weight:600}
 footer{color:var(--text-secondary);font-size:13px;margin-top:24px}
+.demo-banner{background:color-mix(in srgb,var(--warning) 22%,var(--surface-1));border-bottom:1px solid var(--warning);
+ color:var(--text-primary);font-size:14px}.demo-banner p{max-width:1100px;margin:0 auto;padding:8px 20px}
 </style>
 </head>
 <body class="viz-root">
@@ -94,6 +96,10 @@ footer{color:var(--text-secondary);font-size:13px;margin-top:24px}
     {% endif %}
   </nav>
 </div>
+{% if request.datatrust_demo %}
+<div class="demo-banner" role="note"><p><b>Public demo.</b> Your uploads are visible only to you and are deleted
+  regularly (always when the server restarts). Please don't upload personal or confidential data.</p></div>
+{% endif %}
 <main>
 {% block content %}{% endblock %}
 <footer>DataTrust AI · every point lost in a score is listed as a deduction in the full report.</footer>

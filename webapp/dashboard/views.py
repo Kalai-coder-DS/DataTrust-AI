@@ -2,12 +2,17 @@
 Views: thin on purpose. Each one opens the database through datatrust.storage, calls ONE
 function from datatrust.web, and renders a template. No SQL and no analysis logic here.
 
-    UploadRejected -> upload form again with the message   (400)
+    UploadRejected -> upload form again with the message   (400; 429 for demo rate limits)
     NotFound       -> error page                           (404)
     StorageError   -> "database unavailable" page          (503)
+
+Public demo (deployment): request.datatrust_owner (set by VisitorMiddleware) is passed as
+visible_to / owner, so a visitor sees public runs and their own uploads only. Locally it is
+None and everything behaves as before.
 """
 from __future__ import annotations
 
+import dataclasses
 import functools
 import json
 import os
@@ -23,6 +28,8 @@ from datatrust.logger import get_logger
 from datatrust.reporting import render_html
 from datatrust.storage import StorageError
 from datatrust.web.auth import COOKIE_NAME, MAX_AGE, LoginThrottle, check_password, make_token, safe_next
+from datatrust.web.demo import UploadRateLimiter, check_public_upload, client_address
+from datatrust.web.deploy import DemoLimits
 from datatrust.web.jobs import JobManager
 from datatrust.web.services import start_upload_job
 from datatrust.web import (
@@ -45,6 +52,36 @@ JOB_ID = re.compile(r"^[0-9a-f]{32}$")
 
 
 throttle = LoginThrottle()
+upload_limiter = UploadRateLimiter()      # public demo: uploads per hour (visitor, address, server)
+
+DEMO_SUMMARY = "template"   # no Ollama or Claude key on the demo server: don't make visitors wait for them
+
+
+def _owner(request) -> str | None:
+    """The visitor's owner tag on the public demo; None locally (everything visible)."""
+    return getattr(request, "datatrust_owner", None)
+
+
+def _demo(request) -> bool:
+    return bool(getattr(request, "datatrust_demo", False))
+
+
+class DemoLimitReached(UploadRejected):
+    """Too many uploads or a full queue on the public demo (HTTP 429)."""
+
+
+def _demo_gate(request, limits: DemoLimits) -> None:
+    """Public demo checks before a file is even saved. Raises DemoLimitReached."""
+    owner = _owner(request)
+    if jobs.pending(owner) >= 1:
+        raise DemoLimitReached("You already have an analysis running. Wait for it to finish, then try again.")
+    if jobs.pending() >= limits.max_pending_jobs:
+        raise DemoLimitReached("The demo server is busy with other visitors' analyses. Try again in a minute.")
+    wait = upload_limiter.check_and_record([f"visitor:{owner}", f"ip:{client_address(request.META)}"],
+                                           limits.uploads_per_hour, limits.uploads_per_hour_total)
+    if wait:
+        raise DemoLimitReached(f"Upload limit reached on the public demo. Try again in about "
+                               f"{max(1, round(wait / 60))} minute(s).")
 
 
 def background_enabled() -> bool:
@@ -77,7 +114,7 @@ def handles_errors(view):
 @handles_errors
 def home(request):
     with repository() as repo:
-        page = dashboard_page(repo)
+        page = dashboard_page(repo, visible_to=_owner(request))
     return render(request, "dashboard/home.html", page)
 
 
@@ -85,13 +122,27 @@ def home(request):
 @handles_errors
 def upload(request):
     limit_mb = DEFAULT_SETTINGS.max_file_size_mb
+    demo = _demo(request)
+    limits = DemoLimits.from_env() if demo else None
+    context = {"limit_mb": limit_mb, "demo_limits": dataclasses.asdict(limits) if limits else None}
     if request.method == "POST":
         form = UploadForm(request.POST, request.FILES)
+        status = 400
         if form.is_valid():
             f = form.cleaned_data["file"]
+            summary = form.cleaned_data["summary"]
+            if demo and summary:
+                summary = DEMO_SUMMARY
             options = {"target": form.cleaned_data["target"], "size": f.size,
-                       "baseline": form.cleaned_data["baseline"], "summary": form.cleaned_data["summary"]}
+                       "baseline": form.cleaned_data["baseline"], "summary": summary}
+            if demo:
+                options["owner"] = _owner(request)
+                options["check"] = lambda path, name: check_public_upload(path, name, limits)
             try:
+                if demo:
+                    _demo_gate(request, limits)
+                    with repository() as repo:      # keep the demo database small
+                        repo.prune_owned_runs(limits.retention_hours, limits.max_stored_runs)
                 if background_enabled():
                     job_id = start_upload_job(jobs, f.chunks(), f.name, **options)
                     return redirect("dashboard:job", job_id=job_id)
@@ -99,10 +150,12 @@ def upload(request):
                     run_id = analyze_upload(f.chunks(), f.name, repo, **options)
             except UploadRejected as exc:
                 form.add_error(None, str(exc))
+                if isinstance(exc, DemoLimitReached):
+                    status = 429
             else:
                 return redirect("dashboard:run", run_id=run_id)
-        return render(request, "dashboard/upload.html", {"form": form, "limit_mb": limit_mb}, status=400)
-    return render(request, "dashboard/upload.html", {"form": UploadForm(), "limit_mb": limit_mb})
+        return render(request, "dashboard/upload.html", {"form": form, **context}, status=status)
+    return render(request, "dashboard/upload.html", {"form": UploadForm(), **context})
 
 
 @require_http_methods(["GET", "POST"])
@@ -150,6 +203,8 @@ def logout(request):
 def job(request, job_id: str):
     """Phase 10: 'Analysing...' page. Refreshes itself until the run page is ready."""
     found = jobs.get(job_id) if JOB_ID.match(job_id) else None
+    if found is not None and found.get("owner") != _owner(request):
+        found = None                       # public demo: another visitor's job looks like no job
     if found is None:
         raise NotFound("This analysis is not known to the server. It may have finished long ago, "
                        "or the server was restarted while it ran; check the dashboard.")
@@ -164,7 +219,7 @@ def job(request, job_id: str):
 @handles_errors
 def dataset(request, name: str):
     with repository() as repo:
-        page = dataset_page(repo, name)
+        page = dataset_page(repo, name, visible_to=_owner(request))
     return render(request, "dashboard/dataset.html", page)
 
 
@@ -172,7 +227,7 @@ def dataset(request, name: str):
 @handles_errors
 def run(request, run_id: int):
     with repository() as repo:
-        page = run_page(repo, run_id)
+        page = run_page(repo, run_id, visible_to=_owner(request))
     return render(request, "dashboard/run.html", page)
 
 
@@ -186,7 +241,7 @@ def _download(response: HttpResponse, filename: str) -> HttpResponse:
 def report(request, run_id: int):
     """The full self-contained HTML report (Phase 5a), re-rendered from the stored analysis."""
     with repository() as repo:
-        analysis = stored_analysis(repo, run_id)
+        analysis = stored_analysis(repo, run_id, visible_to=_owner(request))
     response = HttpResponse(render_html(analysis), content_type="text/html; charset=utf-8")
     if request.GET.get("download"):
         _download(response, f"datatrust-run-{run_id}.html")
@@ -197,7 +252,7 @@ def report(request, run_id: int):
 @handles_errors
 def analysis_json(request, run_id: int):
     with repository() as repo:
-        analysis = stored_analysis(repo, run_id)
+        analysis = stored_analysis(repo, run_id, visible_to=_owner(request))
     body = json.dumps(analysis, indent=2, ensure_ascii=False, default=str)
     return _download(HttpResponse(body, content_type="application/json; charset=utf-8"),
                      f"datatrust-run-{run_id}.json")

@@ -19,7 +19,7 @@ import tempfile
 import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Callable, Iterable, Iterator
 
 from datatrust.config import DEFAULT_SETTINGS, Settings
 from datatrust.exceptions import DataTrustError
@@ -145,18 +145,26 @@ def start_upload_job(
     baseline: bool = False,
     summary: str | None = None,
     environ: dict | None = None,
+    owner: str | None = None,
+    check: Callable[[Path, str], None] | None = None,
 ) -> str:
     """
     Phase 10: the fast checks (name, type, size, empty) happen NOW, so a wrong file is reported
     on the form at once. The bytes are copied to a private folder before the request ends (the
     web server deletes its own copy then), and the analysis runs in a background job.
     Returns the job id.
+
+    Public demo: owner = the visitor's tag (the run is saved as theirs, and only they can open
+    the job page); check(path, name) = extra content checks (rows, columns, text only), run
+    here so a file over the limits is refused on the form, before it waits in the queue.
     """
     name = validate_upload(file_name, size, settings)
     staging = Path(tempfile.mkdtemp(prefix="datatrust-job-"))
     try:
         staged = staging / TEMP_FILE_NAME
         written = _save_chunks(chunks, staged, name, settings)
+        if check is not None:
+            check(staged, name)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
@@ -165,11 +173,11 @@ def start_upload_job(
         try:
             with repository(environ) as repo:
                 return analyze_upload(_file_chunks(staged), name, repo, target=target, size=written,
-                                      settings=settings, baseline=baseline, summary=summary)
+                                      settings=settings, baseline=baseline, summary=summary, owner=owner)
         finally:
             shutil.rmtree(staging, ignore_errors=True)
 
-    return jobs.submit(work, label=name)
+    return jobs.submit(work, label=name, owner=owner)
 
 
 def analyze_upload(
@@ -181,6 +189,8 @@ def analyze_upload(
     settings: Settings = DEFAULT_SETTINGS,
     baseline: bool = False,
     summary: str | None = None,
+    owner: str | None = None,
+    check: Callable[[Path, str], None] | None = None,
 ) -> int:
     """
     Save the uploaded bytes to a private temporary folder, run the full pipeline (the same
@@ -193,6 +203,7 @@ def analyze_upload(
 
     baseline=True also trains the Phase 7 baseline model (only when a target is given).
     summary="auto" / "template" / "ollama" / "claude" adds the Phase 9 plain-language summary.
+    owner / check: public demo only, see start_upload_job.
     """
     name = validate_upload(file_name, size, settings)
     target = (target or "").strip() or None
@@ -200,6 +211,8 @@ def analyze_upload(
     try:
         path = workdir / TEMP_FILE_NAME
         _save_chunks(chunks, path, name, settings)
+        if check is not None:
+            check(path, name)
         try:
             analysis = analyze_file(path, target=target, baseline=baseline and target is not None, name=name,
                                     summary=summary or None)
@@ -211,7 +224,8 @@ def analyze_upload(
             raise UploadRejected(str(exc).replace(TEMP_FILE_NAME, name)) from exc
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
-    run_id = repo.save(analysis)             # StorageError is NOT an upload problem: let it through
+    # StorageError is NOT an upload problem: let it through.
+    run_id = repo.save(analysis, owner=owner) if owner else repo.save(analysis)
     logger.info("Web upload %s analysed and saved as run #%s", name, run_id)
     return run_id
 
@@ -225,8 +239,10 @@ def _label(name: str) -> str:
     return name.replace("_", " ").capitalize()
 
 
-def dashboard_page(repo: AnalysisRepository) -> dict:
-    datasets = repo.list_datasets()
+# visible_to (public demo): the visitor's owner tag, so pages show public runs and their own only.
+# None (local app, CLI) shows everything, as before.
+def dashboard_page(repo: AnalysisRepository, visible_to: str | None = None) -> dict:
+    datasets = repo.list_datasets(visible_to)
     for d in datasets:
         d["trust"] = _grade(d["trust_grade"])
         d["ml"] = _grade(d["ml_grade"])
@@ -237,8 +253,8 @@ def dashboard_page(repo: AnalysisRepository) -> dict:
     }
 
 
-def dataset_page(repo: AnalysisRepository, name: str) -> dict:
-    history = repo.history(name)
+def dataset_page(repo: AnalysisRepository, name: str, visible_to: str | None = None) -> dict:
+    history = repo.history(name, visible_to)
     if not history:
         raise NotFound(f"No dataset called '{name}' has been analysed yet.")
     runs = []
@@ -260,10 +276,10 @@ def dataset_page(repo: AnalysisRepository, name: str) -> dict:
     }
 
 
-def stored_analysis(repo: AnalysisRepository, run_id: int) -> dict:
+def stored_analysis(repo: AnalysisRepository, run_id: int, visible_to: str | None = None) -> dict:
     """The full stored analysis (for the HTML report and the JSON download)."""
     try:
-        return repo.get_analysis(run_id)
+        return repo.get_analysis(run_id, visible_to)
     except RunNotFound as exc:
         raise NotFound(str(exc)) from exc
 
@@ -283,8 +299,8 @@ def _score_card(score: dict) -> dict:
     }
 
 
-def run_page(repo: AnalysisRepository, run_id: int) -> dict:
-    a = stored_analysis(repo, run_id)
+def run_page(repo: AnalysisRepository, run_id: int, visible_to: str | None = None) -> dict:
+    a = stored_analysis(repo, run_id, visible_to)
     q = a["quality"]
     issues = []
     for i in sorted(q["issues"], key=lambda i: SEVERITY_ORDER.index(i["severity"])):

@@ -6,8 +6,14 @@ Three tables, normalised so each fact is stored once:
   datasets       one row per dataset (identified by file name)
   analysis_runs  one row per analysis: when, file fingerprint, scores, grades, full JSON
   issues         one row per data-quality issue found in a run
+  run_owners     (deployment) which visitor uploaded a run on the public demo. A run with no
+                 row here is public: CLI runs, local web uploads and the demo's sample data.
 
     datasets 1 ──< analysis_runs 1 ──< issues
+                                 1 ──o run_owners
+
+run_owners is a separate table, not a new column, so an existing MySQL database needs no
+ALTER TABLE: init_schema() simply adds the missing table (CREATE TABLE IF NOT EXISTS).
 
 Why keep both summary columns AND the full JSON in analysis_runs?
   - The columns (trust_score, validity, ...) make history queries fast and simple SQL.
@@ -70,6 +76,14 @@ MYSQL_SCHEMA = [
         CONSTRAINT fk_issues_run FOREIGN KEY (run_id) REFERENCES analysis_runs(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
+    """
+    CREATE TABLE IF NOT EXISTS run_owners (
+        run_id   INT         NOT NULL PRIMARY KEY,
+        owner    VARCHAR(64) NOT NULL,
+        KEY ix_run_owners_owner (owner),
+        CONSTRAINT fk_owner_run FOREIGN KEY (run_id) REFERENCES analysis_runs(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
 ]
 
 SQLITE_SCHEMA = [
@@ -118,6 +132,13 @@ SQLITE_SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS ix_issues_run ON issues (run_id)",
     "CREATE INDEX IF NOT EXISTS ix_issues_type ON issues (issue_type)",
+    """
+    CREATE TABLE IF NOT EXISTS run_owners (
+        run_id   INTEGER PRIMARY KEY REFERENCES analysis_runs(id) ON DELETE CASCADE,
+        owner    TEXT    NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_run_owners_owner ON run_owners (owner)",
 ]
 
 

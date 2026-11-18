@@ -4,6 +4,7 @@
 -- It is here so you can read the design, or create the tables yourself in MySQL Workbench.
 --
 --   datasets 1 ──< analysis_runs 1 ──< issues
+--                                1 ──o run_owners   (public demo only)
 
 CREATE DATABASE IF NOT EXISTS datatrust CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE datatrust;
@@ -51,4 +52,14 @@ CREATE TABLE IF NOT EXISTS issues (
     KEY ix_issues_run (run_id),
     KEY ix_issues_type (issue_type),
     CONSTRAINT fk_issues_run FOREIGN KEY (run_id) REFERENCES analysis_runs(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Deployment (public demo): which visitor uploaded a run. No row = a public run
+-- (CLI runs, local web uploads, the demo's sample data). A separate table, so existing
+-- databases need no ALTER TABLE.
+CREATE TABLE IF NOT EXISTS run_owners (
+    run_id   INT         NOT NULL PRIMARY KEY,
+    owner    VARCHAR(64) NOT NULL,
+    KEY ix_run_owners_owner (owner),
+    CONSTRAINT fk_owner_run FOREIGN KEY (run_id) REFERENCES analysis_runs(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

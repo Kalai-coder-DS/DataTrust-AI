@@ -16,7 +16,7 @@ with a score, the reasons behind every lost point, a real model trained on it, a
   against the verified numbers before it is shown.
 - **Web app + history**: Django dashboard, background analyses, login, score history per dataset in MySQL.
 
-Built in 10 phases, each tested; 400+ automated tests. What changed when: [CHANGELOG.md](CHANGELOG.md).
+Built in 10 phases plus a deployment step, each tested; 430+ automated tests. What changed when: [CHANGELOG.md](CHANGELOG.md).
 How it works and why: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## What it finds
@@ -73,6 +73,14 @@ python webapp/manage.py runserver          # open http://127.0.0.1:8000/
 | Full report / JSON | the self-contained HTML report and the complete analysis |
 
 ![Score history of one dataset](docs/screenshots/dataset-history.png)
+
+### Public demo (online)
+
+The same app runs as an open demo on Render's free plan: no login, the two sample datasets for everyone,
+and each visitor's uploads visible only in their own browser (limited to 2 MB, 20,000 rows and 50 columns,
+deleted after 24 hours or on a restart). `render.yaml` holds every setting; the only secret is generated
+by Render, so nothing secret is in this repository. Every click, the security model, the data-persistence
+rules and troubleshooting: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Setup
 
@@ -149,7 +157,10 @@ All settings are environment variables (or lines in `.env`); no code changes nee
 | `DATATRUST_DEBUG` | 1 | Web app: `0` for production settings |
 | `DATATRUST_SECRET_KEY` | (dev key) | Web app: required when `DATATRUST_DEBUG=0` |
 | `DATATRUST_ALLOWED_HOSTS` | localhost,127.0.0.1 | Web app: host names it answers to |
-| `DATATRUST_WEB_PASSWORD` | (none) | Web app login; required when `DATATRUST_DEBUG=0` |
+| `DATATRUST_WEB_PASSWORD` | (none) | Web app login; required when `DATATRUST_DEBUG=0`, unless public demo |
+| `DATATRUST_PUBLIC_DEMO` | 0 | `1` = open public demo (needs `DATATRUST_DEBUG=0`); limits in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
+| `DATATRUST_HTTPS` | 1 | Production only: HTTPS redirect, HSTS, secure cookies; `0` behind a proxy without HTTPS |
+| `DATATRUST_ML_CV_REPEATS` / `DATATRUST_ML_IMPORTANCE_REPEATS` | 3 / 5 | Model-check repeats (the demo uses 1 / 2) |
 | `DATATRUST_WEB_BACKGROUND` | 1 | `0` analyses inside the request instead of in the background |
 | `DATATRUST_WEB_WORKERS` | 2 | Analyses that can run at the same time |
 
@@ -157,7 +168,10 @@ All settings are environment variables (or lines in `.env`); no code changes nee
 
 - Background analyses live in the web server's memory: a restart forgets analyses still running, and several
   server processes would not share them. A database-backed queue is the next step for a real deployment.
-- One login for everyone; no user accounts or per-user datasets.
+- One login for everyone; no user accounts. (The public demo keeps uploads private per browser with a signed
+  cookie, but a visitor who clears cookies loses access to their own uploads.)
+- The free demo server has no persistent disk: uploads are lost on every restart, sleep or redeploy (by design;
+  see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). Its limits are in-memory counters for one server process.
 - Speed: about 3.6 seconds for 300,000 rows × 9 columns on a laptop, plus model training when asked for.
   Files are read fully into memory (200 MB upload limit).
 - The summary guard checks numbers and key terms, not every word; the source (template / local AI / Claude)

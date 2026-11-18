@@ -9,13 +9,17 @@ The ONLY place that knows the table layout. Everything else calls these methods:
     repo.history("insurance.csv")         # every run of that dataset, oldest first
     repo.get_analysis(run_id)             # the full stored analysis (re-render as HTML)
 
+Public demo (deployment): a run can belong to one visitor (save(..., owner=tag)). Readers pass
+visible_to=tag to see the public runs plus that visitor's own runs, and nothing of anyone else.
+visible_to=None (the default: CLI, local web app) sees everything, exactly as before.
+
 This is the "repository pattern": swapping MySQL for another database, or adding a
 cache, changes this file and database.py only - never the CLI, the report or Django.
 """
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from datatrust.logger import get_logger
@@ -41,8 +45,11 @@ class AnalysisRepository:
         logger.info("Schema ready (%s)", self.db.backend)
 
     # -------------------------------------------------------------------- save
-    def save(self, analysis: dict) -> int:
-        """Store one analysis (run + its issues) in a single transaction. Returns the run id."""
+    def save(self, analysis: dict, owner: str | None = None) -> int:
+        """
+        Store one analysis (run + its issues) in a single transaction. Returns the run id.
+        owner (public demo): the visitor's tag; only that visitor can see the run. None = public.
+        """
         try:
             f, scores, meta = analysis["file"], analysis["scores"], analysis["meta"]
             trust, ml = scores["trust"], scores["ml_readiness"]
@@ -74,6 +81,8 @@ class AnalysisRepository:
                 [(run_id, i["severity"], i["issue_type"], i["column"], i["affected_rows"],
                   i["affected_pct"], i["message"], i["recommendation"]) for i in issues],
             )
+            if owner:
+                self.db.execute("INSERT INTO run_owners (run_id, owner) VALUES (?, ?)", (run_id, owner))
         logger.info("Saved run #%s for %s (%d issues)", run_id, f["file_name"], len(issues))
         return int(run_id)
 
@@ -84,28 +93,39 @@ class AnalysisRepository:
         return int(self.db.execute("INSERT INTO datasets (name, first_seen) VALUES (?, ?)", (name, seen_at)))
 
     # ------------------------------------------------------------------- read
-    def list_datasets(self) -> list[dict]:
-        """Every dataset with its number of runs and its latest scores."""
+    @staticmethod
+    def _visible(visible_to: str | None) -> tuple[str, str, tuple]:
+        """SQL pieces that keep only the runs a visitor may see: public runs and their own."""
+        if visible_to is None:
+            return "", "", ()
+        return ("LEFT JOIN run_owners o ON o.run_id = r.id",
+                "AND (o.owner IS NULL OR o.owner = ?)", (visible_to,))
+
+    def list_datasets(self, visible_to: str | None = None) -> list[dict]:
+        """Every dataset with its number of runs and its latest scores (only runs visible_to may see)."""
+        join, where, params = self._visible(visible_to)
         rows = self.db.query(
-            """SELECT d.name, COUNT(r.id) AS runs, MAX(r.analyzed_at) AS last_analyzed
-               FROM datasets d JOIN analysis_runs r ON r.dataset_id = d.id
+            f"""SELECT d.name, COUNT(r.id) AS runs, MAX(r.analyzed_at) AS last_analyzed
+               FROM datasets d JOIN analysis_runs r ON r.dataset_id = d.id {join}
+               WHERE 1 = 1 {where}
                GROUP BY d.id, d.name
-               ORDER BY last_analyzed DESC""")
+               ORDER BY last_analyzed DESC""", params)
         for row in rows:
-            latest = self.history(row["name"])[-1]
+            latest = self.history(row["name"], visible_to)[-1]
             row.update(trust_score=latest["trust_score"], trust_grade=latest["trust_grade"],
                        ml_score=latest["ml_score"], ml_grade=latest["ml_grade"])
         return [_clean(r) for r in rows]
 
-    def history(self, name: str) -> list[dict]:
+    def history(self, name: str, visible_to: str | None = None) -> list[dict]:
         """All runs of one dataset, oldest first, with the change in trust score since the previous run."""
+        join, where, params = self._visible(visible_to)
         rows = [_clean(r) for r in self.db.query(
-            """SELECT r.id AS run_id, r.analyzed_at, r.file_sha256, r.n_rows, r.target,
+            f"""SELECT r.id AS run_id, r.analyzed_at, r.file_sha256, r.n_rows, r.target,
                       r.trust_score, r.trust_grade, r.ml_score, r.ml_grade,
                       r.completeness, r.uniqueness, r.validity, r.consistency, r.total_issues
-               FROM analysis_runs r JOIN datasets d ON d.id = r.dataset_id
-               WHERE d.name = ?
-               ORDER BY r.analyzed_at, r.id""", (name,))]
+               FROM analysis_runs r JOIN datasets d ON d.id = r.dataset_id {join}
+               WHERE d.name = ? {where}
+               ORDER BY r.analyzed_at, r.id""", (name, *params))]
         previous = None
         for row in rows:
             row["trust_change"] = None if previous is None else round(row["trust_score"] - previous["trust_score"], 1)
@@ -113,8 +133,14 @@ class AnalysisRepository:
             previous = row
         return rows
 
-    def get_analysis(self, run_id: int) -> dict:
-        rows = self.db.query("SELECT report_json FROM analysis_runs WHERE id = ?", (run_id,))
+    def get_analysis(self, run_id: int, visible_to: str | None = None) -> dict:
+        """
+        The stored analysis. A run that visible_to may not see raises the SAME RunNotFound as a
+        run that doesn't exist, so run ids reveal nothing about other visitors' uploads.
+        """
+        join, where, params = self._visible(visible_to)
+        rows = self.db.query(f"SELECT r.report_json FROM analysis_runs r {join} WHERE r.id = ? {where}",
+                             (run_id, *params))
         if not rows:
             raise RunNotFound(f"No analysis run with id {run_id}.")
         return json.loads(rows[0]["report_json"])
@@ -123,6 +149,38 @@ class AnalysisRepository:
         return [_clean(r) for r in self.db.query(
             """SELECT severity, issue_type, column_name, affected_rows, affected_pct, message
                FROM issues WHERE run_id = ? ORDER BY id""", (run_id,))]
+
+    # ------------------------------------------------------- public demo upkeep
+    def find_public_run(self, name: str, sha256: str) -> int | None:
+        """A public run of this dataset with exactly these bytes (used to load sample data only once)."""
+        rows = self.db.query(
+            """SELECT r.id FROM analysis_runs r JOIN datasets d ON d.id = r.dataset_id
+               LEFT JOIN run_owners o ON o.run_id = r.id
+               WHERE d.name = ? AND r.file_sha256 = ? AND o.owner IS NULL
+               ORDER BY r.id LIMIT 1""", (name, sha256))
+        return int(rows[0]["id"]) if rows else None
+
+    def prune_owned_runs(self, max_age_hours: float, max_runs: int | None = None,
+                         now: datetime | None = None) -> int:
+        """
+        Delete visitors' runs older than max_age_hours, and the oldest ones beyond max_runs.
+        Public runs (sample data, CLI) are never touched. Issues and ownership rows go with their
+        run (ON DELETE CASCADE); datasets left without any run are removed. Returns runs deleted.
+        """
+        now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+        cutoff = (now - timedelta(hours=max_age_hours)).strftime("%Y-%m-%d %H:%M:%S")
+        owned = self.db.query(
+            """SELECT r.id, r.analyzed_at FROM analysis_runs r JOIN run_owners o ON o.run_id = r.id
+               ORDER BY r.analyzed_at DESC, r.id DESC""")
+        doomed = [row["id"] for i, row in enumerate(owned)
+                  if _clean(row)["analyzed_at"] < cutoff or (max_runs is not None and i >= max_runs)]
+        if not doomed:
+            return 0
+        with self.db.transaction():
+            self.db.executemany("DELETE FROM analysis_runs WHERE id = ?", [(i,) for i in doomed])
+            self.db.execute("DELETE FROM datasets WHERE id NOT IN (SELECT dataset_id FROM analysis_runs)")
+        logger.info("Pruned %d visitor run(s) from the public demo", len(doomed))
+        return len(doomed)
 
 
 # ---------------------------------------------------------------- helpers

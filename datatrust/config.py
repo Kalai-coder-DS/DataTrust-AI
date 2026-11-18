@@ -131,12 +131,15 @@ class Settings:
     # Rows used for training (a random, class-stratified sample above this): keeps big files fast.
     ml_max_rows: int = field(default_factory=lambda: _env_int("DATATRUST_ML_MAX_ROWS", 20_000))
     ml_cv_folds: int = 5            # cross-validation folds
-    ml_cv_repeats: int = 3          # repeat the k folds with new shuffles (small files only): steadier scores
+    # Repeat the k folds with new shuffles (small files only): steadier scores. The public demo
+    # server sets 1 (DATATRUST_ML_CV_REPEATS) because its CPU is about 10x slower than a laptop.
+    ml_cv_repeats: int = field(default_factory=lambda: _env_int("DATATRUST_ML_CV_REPEATS", 3))
     ml_repeat_max_rows: int = 5_000 # above this, one round of k folds (big files are steady and slow)
     ml_min_rows: int = 30           # fewer usable rows than this: no model is trained
     ml_random_state: int = 0        # same data -> same scores, every run
     ml_max_categories: int = 20     # one-hot columns per categorical feature (rarer labels grouped)
-    ml_importance_repeats: int = 5  # Phase 8: shuffles per column per test fold
+    # Phase 8: shuffles per column per test fold (the demo server sets 2: DATATRUST_ML_IMPORTANCE_REPEATS).
+    ml_importance_repeats: int = field(default_factory=lambda: _env_int("DATATRUST_ML_IMPORTANCE_REPEATS", 5))
 
     # ---------- Logging ----------
     log_dir: Path = PROJECT_ROOT / "logs"

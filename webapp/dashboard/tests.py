@@ -440,3 +440,152 @@ class ErrorAndSecurityTests(WebTestCase):
         self.assertEqual(r["X-Content-Type-Options"], "nosniff")
         self.assertIn("default-src 'none'", r["Content-Security-Policy"])
         self.assertIn("frame-ancestors 'none'", r["Content-Security-Policy"])
+
+
+# ============================================================= deployment: public demo
+from django.conf import settings as django_settings  # noqa: E402
+from django.test import override_settings  # noqa: E402
+
+TINY_CSV = b"id,amount\n1,10\n2,20\n3,30\n"
+
+
+@override_settings(DATATRUST_PUBLIC_DEMO=True)
+class PublicDemoTests(WebTestCase):
+    """Deployment: the open demo. Every browser is its own visitor; uploads are private and limited."""
+
+    def setUp(self):
+        super().setUp()
+        from datatrust.web.demo import UploadRateLimiter
+        patcher = mock.patch("dashboard.views.upload_limiter", UploadRateLimiter())
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.other = Client(REMOTE_ADDR="10.0.0.2")             # a second visitor: own cookies, own address
+
+    def upload_as(self, client, path=None, name=None, target="", content=None, summary=""):
+        return client.post(reverse("dashboard:upload"),
+                           {"file": csv_upload(path, name, content), "target": target, "summary": summary})
+
+    def owner_of(self, client) -> str:
+        from datatrust.web.demo import VISITOR_COOKIE, owner_tag, read_visitor_cookie
+        client.get(reverse("dashboard:home"))
+        visitor = read_visitor_cookie(client.cookies[VISITOR_COOKIE].value, django_settings.SECRET_KEY)
+        return owner_tag(visitor, django_settings.SECRET_KEY)
+
+    def seed_public_sample(self):
+        from datatrust.web import repository
+        from datatrust.web.demo import seed_sample_data
+        with repository() as repo:
+            seed_sample_data(repo, ({"file": "customers_clean.csv"},))
+
+    def test_banner_and_limits_are_shown(self):
+        r = self.client.get(reverse("dashboard:home"))
+        self.assertContains(r, "Public demo.")
+        self.assertContains(r, "visible only to you")
+        page = self.client.get(reverse("dashboard:upload"))
+        self.assertContains(page, "Public demo limits")
+        self.assertContains(page, "50 columns")
+        self.assertNotContains(page, "Log out")                  # open demo: no login
+
+    def test_visitor_cookie_is_set_once_and_protected(self):
+        first = self.client.get(reverse("dashboard:home"))
+        cookie = first.cookies["datatrust_visitor"]
+        self.assertTrue(cookie["httponly"])
+        self.assertEqual(cookie["samesite"], "Lax")
+        self.assertNotIn("datatrust_visitor", self.client.get(reverse("dashboard:home")).cookies)  # kept, not renewed
+
+    def test_uploads_are_private_but_samples_are_shared(self):
+        self.seed_public_sample()
+        r = self.upload_as(self.client, SAMPLE_DIR / "customers_dirty.csv", target="churned")
+        self.assertEqual(r.status_code, 302)
+        run_url = r["Location"]
+        run_id = int(run_url.rstrip("/").split("/")[-1])
+        self.assertContains(self.client.get(run_url), "79.8")
+        mine = self.client.get(reverse("dashboard:home"))
+        self.assertContains(mine, "customers_dirty.csv")
+        self.assertContains(mine, "customers_clean.csv")
+
+        theirs = self.other.get(reverse("dashboard:home"))
+        self.assertNotContains(theirs, "customers_dirty.csv")
+        self.assertContains(theirs, "customers_clean.csv")       # the public sample
+        for url in (run_url, reverse("dashboard:report", args=[run_id]), reverse("dashboard:json", args=[run_id]),
+                    reverse("dashboard:dataset", args=["customers_dirty.csv"])):
+            self.assertEqual(self.other.get(url).status_code, 404, url)
+
+    def test_a_forged_visitor_cookie_gets_a_new_identity(self):
+        r = self.upload_as(self.client, content=TINY_CSV, name="mine.csv")
+        stranger = Client()
+        genuine = self.client.cookies["datatrust_visitor"].value
+        stranger.cookies["datatrust_visitor"] = genuine[:-1] + ("1" if genuine.endswith("0") else "0")
+        self.assertEqual(stranger.get(r["Location"]).status_code, 404)
+
+    def test_summary_is_always_the_offline_template(self):
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}):
+            r = self.upload_as(self.client, SAMPLE_DIR / "customers_clean.csv", summary="claude")
+        page = self.client.get(r["Location"])
+        self.assertContains(page, "Template summary (offline)")
+        self.assertNotContains(page, "ANTHROPIC_API_KEY is not set")   # no failed attempt, no waiting
+
+    def test_rows_columns_and_binary_files_are_refused_on_the_form(self):
+        with mock.patch.dict(os.environ, {"DATATRUST_DEMO_MAX_ROWS": "10"}):
+            r = self.upload_as(self.client, SAMPLE_DIR / "customers_dirty.csv")
+        self.assertContains(r, "the public demo accepts up to 10", status_code=400)
+        with mock.patch.dict(os.environ, {"DATATRUST_DEMO_MAX_COLUMNS": "3"}):
+            r = self.upload_as(self.client, SAMPLE_DIR / "customers_clean.csv")
+        self.assertContains(r, "the public demo accepts up to 3", status_code=400)
+        r = self.upload_as(self.client, name="sheet.csv", content=b"PK\x03\x04\x00\x00\x00binary")
+        self.assertContains(r, "binary data", status_code=400)
+
+    def test_upload_rate_limit(self):
+        with mock.patch.dict(os.environ, {"DATATRUST_DEMO_UPLOADS_PER_HOUR": "2"}):
+            for i in range(2):
+                self.assertEqual(self.upload_as(self.client, content=TINY_CSV, name=f"t{i}.csv").status_code, 302)
+            r = self.upload_as(self.client, content=TINY_CSV, name="t3.csv")
+            self.assertContains(r, "Upload limit reached", status_code=429)
+            self.assertEqual(self.upload_as(self.other, content=TINY_CSV, name="o.csv").status_code, 302)
+
+    def test_one_running_analysis_per_visitor_and_a_server_wide_queue_cap(self):
+        import threading
+        from dashboard.views import jobs
+        release = threading.Event()
+        mine = jobs.submit(lambda: release.wait(10) and 1, label="slow.csv", owner=self.owner_of(self.client))
+        try:
+            r = self.upload_as(self.client, content=TINY_CSV, name="t.csv")
+            self.assertContains(r, "already have an analysis running", status_code=429)
+            with mock.patch.dict(os.environ, {"DATATRUST_DEMO_MAX_PENDING": "1"}):
+                r = self.upload_as(self.other, content=TINY_CSV, name="o.csv")
+            self.assertContains(r, "busy", status_code=429)
+        finally:
+            release.set()
+            jobs.wait(mine, 10)
+
+    def test_another_visitors_job_page_is_404(self):
+        from dashboard.views import jobs
+        with mock.patch.dict(os.environ, {"DATATRUST_WEB_BACKGROUND": "1"}):
+            r = self.upload_as(self.client, content=TINY_CSV, name="t.csv")
+        job_id = r["Location"].rstrip("/").split("/")[-1]
+        jobs.wait(job_id, 60)
+        self.assertEqual(self.other.get(r["Location"]).status_code, 404)
+        self.assertEqual(self.client.get(r["Location"]).status_code, 302)   # the owner is sent to the run
+
+    def test_oversized_request_is_refused_before_reading(self):
+        r = self.client.generic("POST", reverse("dashboard:upload"), b"x", content_type="multipart/form-data",
+                                CONTENT_LENGTH=str(10 ** 12))
+        self.assertEqual(r.status_code, 413)
+        self.assertContains(r, "File too large", status_code=413)
+
+
+class LocalModeUnchangedTests(WebTestCase):
+    """Deployment changes nothing on your own computer: no banner, no visitor cookie, one shared history."""
+
+    def test_no_banner_no_cookie_and_everyone_sees_every_run(self):
+        r = self.client.get(reverse("dashboard:home"))
+        self.assertNotContains(r, "Public demo.")
+        self.assertNotIn("datatrust_visitor", r.cookies)
+        self.assertNotContains(self.client.get(reverse("dashboard:upload")), "Public demo limits")
+        upload = self.upload(content=TINY_CSV, name="shared.csv")
+        self.assertEqual(Client().get(upload["Location"]).status_code, 200)
+
+    def test_oversized_request_is_413_here_too(self):
+        r = self.client.generic("POST", reverse("dashboard:upload"), b"x", content_type="multipart/form-data",
+                                CONTENT_LENGTH=str(10 ** 12))
+        self.assertEqual(r.status_code, 413)

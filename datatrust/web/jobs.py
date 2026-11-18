@@ -50,10 +50,11 @@ class JobManager:
             self._executor = ThreadPoolExecutor(max_workers=self.workers, thread_name_prefix="datatrust-job")
         return self._executor
 
-    def submit(self, fn: Callable[[], int], label: str) -> str:
+    def submit(self, fn: Callable[[], int], label: str, owner: str | None = None) -> str:
+        """owner (public demo): the visitor's tag; the view shows the job only to that visitor."""
         job_id = uuid.uuid4().hex
         with self._lock:
-            self._jobs[job_id] = {"id": job_id, "label": label, "state": "queued", "run_id": None,
+            self._jobs[job_id] = {"id": job_id, "label": label, "owner": owner, "state": "queued", "run_id": None,
                                   "error": None, "error_kind": None, "submitted": time.time(),
                                   "started": None, "finished": None}
             self._done[job_id] = threading.Event()
@@ -100,6 +101,12 @@ class JobManager:
             end = job["finished"] or time.time()
             job["elapsed"] = round(end - (job["started"] or job["submitted"]), 1)
         return job
+
+    def pending(self, owner: str | None = None) -> int:
+        """Jobs queued or running: all of them, or one visitor's (public demo limits)."""
+        with self._lock:
+            return sum(1 for j in self._jobs.values()
+                       if j["state"] in ("queued", "running") and (owner is None or j["owner"] == owner))
 
     def wait(self, job_id: str, timeout: float = 60) -> dict | None:
         """Block until the job finishes (tests and scripts)."""

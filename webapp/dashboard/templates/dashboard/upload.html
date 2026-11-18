@@ -1,4 +1,5 @@
 {% extends "dashboard/base.html" %}
+{% load humanize %}
 {% block title %}Analyse a CSV{% endblock %}
 {% block content %}
 <header class="page">
@@ -7,6 +8,17 @@
   <p class="sub">The file is analysed on this server, the results are saved to the database, and the
      uploaded file is deleted afterwards. Files up to {{ limit_mb }} MB.</p>
 </header>
+
+{% if demo_limits %}
+<section aria-labelledby="demo-limits">
+  <h2 id="demo-limits">Public demo limits</h2>
+  <p class="help">Up to {{ limit_mb }} MB, {{ demo_limits.max_rows|intcomma }} rows and {{ demo_limits.max_columns }} columns per file;
+     {{ demo_limits.uploads_per_hour }} uploads per hour. Your results are visible only in this browser and are deleted
+     after {{ demo_limits.retention_hours }} hours, or sooner when the server restarts.
+     Summaries use the offline template here (no AI server runs on the demo), and the model check uses fewer
+     repeats than on a laptop, so its noise estimate can differ slightly. For bigger files, run DataTrust AI on your own computer.</p>
+</section>
+{% endif %}
 
 <section>
   <form method="post" enctype="multipart/form-data" novalidate>

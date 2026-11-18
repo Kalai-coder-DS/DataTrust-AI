@@ -17,6 +17,7 @@ Phase 6 Django app, two layers of checks:
 from __future__ import annotations
 
 import ast
+from dataclasses import asdict
 import re
 import subprocess
 import sys
@@ -26,6 +27,7 @@ import pytest
 
 from datatrust.storage import AnalysisRepository, Database, DBConfig
 from datatrust.web import analyze_upload, dashboard_page, dataset_page, run_page
+from datatrust.web.deploy import DemoLimits
 
 ROOT = Path(__file__).resolve().parent.parent
 WEBAPP = ROOT / "webapp"
@@ -208,7 +210,7 @@ def pages(sample_dir, tmp_path_factory):
         "dashboard/home.html": dashboard_page(repo),
         "dashboard/dataset.html": dataset_page(repo, "customers_dirty.csv"),
         "dashboard/run.html": run_page(repo, run_id),
-        "dashboard/upload.html": {"form": object(), "limit_mb": 200},
+        "dashboard/upload.html": {"form": object(), "limit_mb": 200, "demo_limits": asdict(DemoLimits())},
         "dashboard/error.html": {"status": 404, "title": "Not found", "message": "x"},
         "dashboard/login.html": {"next": "/runs/1/", "error": "Wrong password."},
         "dashboard/job.html": {"refresh_seconds": 3, "job": {
@@ -297,6 +299,29 @@ def test_production_mode_requires_a_web_password():
     result = subprocess.run([sys.executable, str(WEBAPP / "manage.py"), "check"], cwd=ROOT, env=env,
                             capture_output=True, text=True, timeout=120)
     assert result.returncode != 0 and "Set DATATRUST_WEB_PASSWORD" in result.stderr
+
+
+def _check_with(extra_env: dict, *args: str) -> subprocess.CompletedProcess:
+    import os
+    env = {**os.environ, **extra_env}
+    return subprocess.run([sys.executable, str(WEBAPP / "manage.py"), "check", *args], cwd=ROOT, env=env,
+                          capture_output=True, text=True, timeout=120)
+
+
+def test_public_demo_settings_pass_djangos_deploy_check():
+    """Deployment: the Render settings pass `manage.py check --deploy` with no warnings at all."""
+    pytest.importorskip("django", reason="Django not installed: pip install -r requirements.txt")
+    result = _check_with({"DATATRUST_DEBUG": "0", "DATATRUST_PUBLIC_DEMO": "1", "DATATRUST_WEB_PASSWORD": "",
+                          "DATATRUST_SECRET_KEY": "k3y-" + "a1B2c3D4e5" * 6,
+                          "RENDER_EXTERNAL_HOSTNAME": "datatrust-ai.onrender.com"},
+                         "--deploy", "--fail-level", "WARNING")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_public_demo_refuses_debug_mode():
+    pytest.importorskip("django", reason="Django not installed: pip install -r requirements.txt")
+    result = _check_with({"DATATRUST_DEBUG": "1", "DATATRUST_PUBLIC_DEMO": "1"})
+    assert result.returncode != 0 and "needs DATATRUST_DEBUG=0" in result.stderr
 
 
 def test_django_page_tests():

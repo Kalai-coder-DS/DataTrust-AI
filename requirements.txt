@@ -5,3 +5,4 @@ pytest>=8.0
 PyMySQL>=1.1      # Phase 5b: talk to MySQL (pure Python, easy to install on Windows)
 Django>=5.2.8     # Phase 6: web app (5.2 LTS; 5.2.8+ supports Python 3.14)
 scikit-learn>=1.5 # Phase 7: baseline model (gradient boosting, cross-validation)
+gunicorn>=23.0; sys_platform != "win32"  # Deployment: production web server on Render (Linux only; not installed on Windows)
